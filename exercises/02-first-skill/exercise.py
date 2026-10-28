@@ -39,12 +39,12 @@ client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 GOAL = "Check the health of our vendor Eastern Parts Corp."
 
 
-def run_agent(system_prompt: str, goal: str, label: str) -> str:
+def run_agent(system_prompt: str, goal: str, label: str):
+    """Returns (answer, tool_calls_log)."""
     messages = [{"role": "user", "content": goal}]
-    iterations = 0
+    tool_calls_log = []
 
     while True:
-        iterations += 1
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=1024,
@@ -57,7 +57,12 @@ def run_agent(system_prompt: str, goal: str, label: str) -> str:
             tool_results = []
             for block in response.content:
                 if block.type == "tool_use":
-                    console.print(f"  [{label}] → [cyan]{block.name}[/cyan]({block.input})")
+                    # Extract the most readable part of the input for display
+                    inp = block.input
+                    hint = inp.get("sql", inp.get("query", str(inp)))[:60]
+                    entry = f"{block.name}({hint!r})"
+                    tool_calls_log.append(entry)
+                    console.print(f"  [{label}] → [cyan]{block.name}[/cyan]")
                     result = run_tool(block.name, block.input)
                     tool_results.append({
                         "type": "tool_result",
@@ -70,24 +75,28 @@ def run_agent(system_prompt: str, goal: str, label: str) -> str:
         elif response.stop_reason == "end_turn":
             for block in response.content:
                 if hasattr(block, "text"):
-                    return block.text.strip()
-            return ""
+                    return block.text.strip(), tool_calls_log
+            return "", tool_calls_log
 
 
 # ── Part A: No skill — agent decides ─────────────────────────────────────
 
 console.print(Rule("[bold]Part A — No Skill (agent decides)[/bold]"))
+console.print("[dim]Goal:[/dim]", GOAL)
+console.print()
 
 NO_SKILL_PROMPT = """You are a procurement analyst assistant.
 You have tools available. Use them to answer the user's request."""
 
-answer_a = run_agent(NO_SKILL_PROMPT, GOAL, "no-skill")
+answer_a, calls_a = run_agent(NO_SKILL_PROMPT, GOAL, "no-skill")
 console.print(Panel(answer_a, title="[bold]Answer (no skill)[/bold]", border_style="yellow"))
 console.print()
 
 # ── Part B: With skill — steps are fixed ─────────────────────────────────
 
 console.print(Rule("[bold]Part B — With Skill (steps are fixed)[/bold]"))
+console.print("[dim]Goal:[/dim]", GOAL)
+console.print()
 
 VENDOR_HEALTH_SKILL = """You are a procurement analyst.
 
@@ -106,16 +115,37 @@ Then write a short report with:
 ## Risk Assessment (one sentence)
 """
 
-answer_b = run_agent(VENDOR_HEALTH_SKILL, GOAL, "skill")
+answer_b, calls_b = run_agent(VENDOR_HEALTH_SKILL, GOAL, "skill")
 console.print(Panel(answer_b, title="[bold]Answer (with skill)[/bold]", border_style="green"))
+console.print()
 
-# ── What to observe ───────────────────────────────────────────────────────
+# ── Side-by-side comparison ───────────────────────────────────────────────
+
+console.print(Rule("[bold]Comparison[/bold]"))
+
+max_rows = max(len(calls_a), len(calls_b))
+no_skill_col = calls_a + ["—"] * (max_rows - len(calls_a))
+skill_col    = calls_b + ["—"] * (max_rows - len(calls_b))
+
+from rich.table import Table
+table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
+table.add_column(f"No Skill  ({len(calls_a)} tool calls)", style="yellow", width=42)
+table.add_column(f"With Skill  ({len(calls_b)} tool calls)", style="green", width=42)
+for a, b in zip(no_skill_col, skill_col):
+    table.add_row(a, b)
+console.print(table)
+console.print()
+
+missed = {"search_knowledge_base"} - {c.split("(")[0] for c in calls_a}
+note = ""
+if missed:
+    note = f"\n[yellow]No-skill agent skipped:[/yellow] {', '.join(missed)} — policy check was missing."
 
 console.print(Panel(
-    "Part A: the agent decided what to check — it may have missed steps.\n"
-    "Part B: the skill forced EXACTLY 4 steps, always, every time.\n\n"
-    "A skill = consistent, repeatable, auditable behaviour.\n"
-    "The agent's job is no longer 'figure out what to do' — it's 'follow the steps'.\n\n"
+    f"Same goal. Same tools. [bold]Different behaviour.[/bold]{note}\n\n"
+    "No skill: the agent [yellow]chose[/yellow] what to check — steps vary every run.\n"
+    "With skill: the agent [green]followed[/green] 4 fixed steps — same output every time.\n\n"
+    "A skill = consistent, repeatable, auditable behaviour.\n\n"
     "But wait — did we actually NEED a skill here?\n"
     "→ That's Exercise 3.",
     title="[bold]What you saw[/bold]",
