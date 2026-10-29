@@ -139,6 +139,9 @@ goals = [
     "Check the health of vendor Eastern Parts Corp",
     "Give me a report of all overdue invoices",
     "Run a full procurement audit",
+    # ✏️  Once you've filled in skills/my-first-skill/SKILL.md,
+    #     add a goal here that matches your description and run again:
+    # "???",
 ]
 
 for goal in goals:
@@ -167,4 +170,17 @@ console.print(Panel(
     "  - invoke_skill is a synthetic tool — intercepted by the service, never leaves it",
     title="[bold]How orchestration works[/bold]",
     border_style="cyan"
+))
+
+console.print(Panel(
+    "✏️  Your turn — open  skills/my-first-skill/SKILL.md\n\n"
+    "Replace every ??? with real content:\n"
+    "  1. Give it a description that clearly says WHEN to use it\n"
+    "  2. Write 1-2 steps (query_database or search_knowledge_base)\n"
+    "  3. Give the report section a name\n\n"
+    "Then run this exercise again.\n"
+    "Your skill will appear in the index automatically — no code change needed.\n\n"
+    "Try asking a goal that matches your description and watch it get routed there.",
+    title="[bold yellow]Try it yourself[/bold yellow]",
+    border_style="yellow"
 ))

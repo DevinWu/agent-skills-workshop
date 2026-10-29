@@ -99,6 +99,18 @@ console.print()
 
 # ── Without skill (agent decides) ────────────────────────────────────────
 
+# ✏️  Your turn — write a system prompt that answers the question directly.
+#     The goal is ONE tool call, not a full report.
+#     Hint: tell the agent to be direct and use the minimum tools needed.
+#
+# SIMPLE_PROMPT = """You are a procurement analyst assistant.
+# ??? — fill in the instruction that keeps this focused
+# """
+#
+# Uncomment and complete the block above, then uncomment the line below:
+# answer_direct, calls_direct, time_direct = run_agent(SIMPLE_PROMPT, QUESTION, "direct")
+
+# ── Reference solution (comment this out once you've written yours) ───────
 SIMPLE_PROMPT = """You are a procurement analyst assistant.
 Answer the question using the minimum tool calls needed. Be direct and concise."""
 

@@ -115,6 +115,12 @@ Then write a short report with:
 ## Risk Assessment (one sentence)
 """
 
+# ✏️  Your turn — open  skills/vendor-health/SKILL.md
+#     You'll see the same 4 steps live there as a real skill file.
+#     Try adding a 5th step:
+#       5. Search the knowledge base for the three-way match process
+#     Then run Part B again. Does the report change?
+
 answer_b, calls_b = run_agent(VENDOR_HEALTH_SKILL, GOAL, "skill")
 console.print(Panel(answer_b, title="[bold]Answer (with skill)[/bold]", border_style="green"))
 console.print()

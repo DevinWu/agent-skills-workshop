@@ -72,7 +72,8 @@ console.print("[dim]Same loop as Session 1. Tools + stop_reason. Let's move fast
 
 questions = [
     "Which vendors have a High risk rating?",
-    "What is our policy for high-risk vendors?",
+    # TODO: uncomment the line below and run again — what tool does the agent call?
+    # "What is our policy for high-risk vendors?",
 ]
 
 for q in questions:
@@ -84,7 +85,9 @@ for q in questions:
 console.print(Panel(
     "stop_reason = 'tool_use'  → LLM wants to call a tool\n"
     "stop_reason = 'end_turn'  → LLM is done, return the answer\n\n"
-    "This loop is the foundation everything else builds on.",
+    "This loop is the foundation everything else builds on.\n\n"
+    "✏️  Try it: uncomment the second question above and run again.\n"
+    "    Which tool does it call this time — query_database or search_knowledge_base?",
     title="[bold]Key reminder[/bold]",
     border_style="yellow"
 ))
