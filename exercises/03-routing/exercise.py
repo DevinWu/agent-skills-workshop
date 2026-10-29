@@ -37,7 +37,8 @@ from pipeline.tools import run_tool, ALL_TOOLS
 console = Console()
 client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
-QUESTION = "What is the risk rating of Eastern Parts Corp?"
+QUESTION_SIMPLE  = "What is the risk rating of Eastern Parts Corp?"
+QUESTION_FULL    = "Check the health of our vendor Eastern Parts Corp."
 
 
 def run_agent(system_prompt: str, question: str, label: str) -> tuple[str, int, float]:
@@ -80,20 +81,16 @@ def run_agent(system_prompt: str, question: str, label: str) -> tuple[str, int, 
 # ── With skill (4 forced steps) ───────────────────────────────────────────
 
 console.print(Rule("[bold]Exercise 3 — When is a Skill Overkill?[/bold]"))
-console.print(f"\n[bold cyan]Question:[/bold cyan] {QUESTION}\n")
+console.print(f"\n[bold cyan]With skill:[/bold cyan]  {QUESTION_FULL}")
+console.print(f"[bold cyan]Without skill:[/bold cyan] {QUESTION_SIMPLE}\n")
 
-VENDOR_HEALTH_SKILL = """You are a procurement analyst.
+import re, os
+_skill_path = os.path.join(os.path.dirname(__file__), "../../skills/vendor-health/SKILL.md")
+_skill_content = open(_skill_path).read()
+VENDOR_HEALTH_SKILL = re.sub(r"^---\n.*?\n---\n?", "", _skill_content, flags=re.DOTALL).strip()
 
-Follow these steps EXACTLY:
-1. Query the database for the vendor's details (risk_rating, payment_terms, country)
-2. Query the database for their open purchase orders
-3. Query the database for any overdue invoices
-4. Search the knowledge base for high-risk vendor policy
-
-Then write a report with sections: Vendor Profile, Open Orders, Overdue Invoices, Policy Notes, Risk Assessment."""
-
-console.print(Rule("[dim]With vendor-health skill[/dim]"))
-answer_skill, calls_skill, time_skill = run_agent(VENDOR_HEALTH_SKILL, QUESTION, "skill")
+console.print(Rule("[dim]With vendor-health skill — full health check[/dim]"))
+answer_skill, calls_skill, time_skill = run_agent(VENDOR_HEALTH_SKILL, QUESTION_FULL, "skill")
 console.print(Panel(answer_skill, title=f"[bold]Skill answer ({calls_skill} tool calls, {time_skill:.1f}s)[/bold]", border_style="yellow"))
 console.print()
 
@@ -114,15 +111,16 @@ console.print()
 SIMPLE_PROMPT = """You are a procurement analyst assistant.
 Answer the question using the minimum tool calls needed. Be direct and concise."""
 
-console.print(Rule("[dim]Without skill (direct)[/dim]"))
-answer_direct, calls_direct, time_direct = run_agent(SIMPLE_PROMPT, QUESTION, "direct")
+console.print(Rule("[dim]Without skill — simple direct question[/dim]"))
+answer_direct, calls_direct, time_direct = run_agent(SIMPLE_PROMPT, QUESTION_SIMPLE, "direct")
 console.print(Panel(answer_direct, title=f"[bold]Direct answer ({calls_direct} tool call, {time_direct:.1f}s)[/bold]", border_style="green"))
 
 # ── The lesson ────────────────────────────────────────────────────────────
 
 console.print(Panel(
-    f"Skill:  {calls_skill} tool calls, {time_skill:.1f}s — thorough but heavy for this question\n"
-    f"Direct: {calls_direct} tool call,  {time_direct:.1f}s — answered the actual question\n\n"
+    f"Skill:  {calls_skill} tool calls, {time_skill:.1f}s — full health check, 4 steps forced\n"
+    f"Direct: {calls_direct} tool call,  {time_direct:.1f}s — answered 'what is the risk rating?'\n\n"
+    "The question decided the approach — not the other way around.\n\n"
     "A skill adds value when:\n"
     "  ✓ The workflow has multiple steps that must always happen\n"
     "  ✓ The output format must be consistent\n"
