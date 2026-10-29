@@ -44,11 +44,13 @@ def run_agent(question: str) -> str:
             messages=messages,
         )
 
+        console.print(f"  [dim]stop_reason = [/dim][bold yellow]{response.stop_reason!r}[/bold yellow]")
+
         if response.stop_reason == "tool_use":
             tool_results = []
             for block in response.content:
                 if block.type == "tool_use":
-                    console.print(f"  → [cyan]{block.name}[/cyan]")
+                    console.print(f"    → [cyan]{block.name}[/cyan]")
                     result = run_tool(block.name, block.input)
                     tool_results.append({
                         "type": "tool_result",
@@ -59,6 +61,7 @@ def run_agent(question: str) -> str:
             messages.append({"role": "user", "content": tool_results})
 
         elif response.stop_reason == "end_turn":
+            console.print(f"  [dim]→ done[/dim]")
             for block in response.content:
                 if hasattr(block, "text"):
                     return block.text.strip()
