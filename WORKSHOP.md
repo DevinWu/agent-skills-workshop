@@ -124,22 +124,68 @@ Four policy documents in `pipeline/tools.py`:
 ## 0:15 — Exercise 1: Refresher
 
 > **Key points to land:**
-> - The loop has not changed — same two stop_reason values
-> - Tools answer questions training data cannot
-> - This is the foundation everything in Session 2 builds on
+> - Claude cannot answer data questions from memory — it needs a tool
+> - `stop_reason` is the signal your code watches — it drives the entire loop
+> - Every iteration: Claude thinks → your code acts → Claude thinks again
+> - This loop is unchanged in Session 2 — skills just change the system prompt
 
 ```bash
 python3 exercises/01-refresher/exercise.py
 ```
 
-Two questions — one data, one policy. Watch the `→` tool calls and the answers.
+### What you will see
 
 ```
-stop_reason = "tool_use"  → Claude needs a tool, your loop runs it
-stop_reason = "end_turn"  → Claude is done, return the answer
+Q: List all overdue invoices and tell me what our late payment policy says.
+  stop_reason = 'tool_use'
+    → query_database
+    → search_knowledge_base
+  stop_reason = 'end_turn'
+  → done
 ```
 
-> **Presenter note:** 15 minutes. Fast recap. If everyone is comfortable with the loop, move on.
+### What is actually happening
+
+When you call `client.messages.create(...)`, Claude reads your question and decides it cannot answer from memory — it needs data. It responds with `stop_reason = "tool_use"` and a list of tool calls it wants to make.
+
+Your loop intercepts this. It runs each tool, collects the results, and sends them back to Claude in the next message. Claude reads the results and now has what it needs to answer — so it responds with `stop_reason = "end_turn"` and the actual text.
+
+Step by step:
+
+```
+Your code                         Claude
+──────────────────────────────────────────────────────────
+send question
+                                  "I need the database"
+                                  stop_reason = "tool_use"
+                                  tool_use: query_database(...)
+                                  tool_use: search_knowledge_base(...)
+run query_database(...)
+run search_knowledge_base(...)
+send tool results back
+                                  reads the results
+                                  "Now I can answer"
+                                  stop_reason = "end_turn"
+                                  text: "There are 3 overdue invoices..."
+return the answer
+```
+
+Two things to notice:
+1. **Both tools fired in a single loop turn.** Claude requested them together — your code ran them both and sent both results back at once.
+2. **Claude never touched the database directly.** It asked your code to run the query. Your code is the only thing that touches real systems.
+
+### Why stop_reason matters
+
+```python
+if response.stop_reason == "tool_use":
+    # Claude is not done — run the tools and loop again
+elif response.stop_reason == "end_turn":
+    # Claude is done — extract the text and return it
+```
+
+If you forget to check `stop_reason` and just return the response immediately, you get Claude's tool request back — not an answer. The loop exists entirely to handle `tool_use` turns until Claude reaches `end_turn`.
+
+> **Presenter note:** 15 minutes. Show the output, walk through the step-by-step diagram, then ask: "what happens if stop_reason is tool_use and we just return immediately?" Let someone answer before moving on.
 
 ---
 
@@ -236,7 +282,8 @@ Claude is no longer deciding what to do. It is following your instructions.
 > **Key points to land:**
 > - Part A: raw agent — steps vary, may miss things
 > - Part B: skill — exactly 4 steps, always, same output structure
-> - The only difference is the system prompt — that is the skill
+> - The only difference is the system prompt — that IS the skill
+> - A skill does not change the loop — it changes what Claude is told to do
 
 ```bash
 python3 exercises/02-first-skill/exercise.py
@@ -246,9 +293,43 @@ python3 exercises/02-first-skill/exercise.py
 
 **Part B** — with skill. The skill forces exactly 4 steps. Count them. Same structure every time.
 
-After running, open the skill body in the exercise file (`VENDOR_HEALTH_SKILL`). The body IS the system prompt for Part B.
+### What is actually happening
 
-> **Presenter note:** 30 minutes. After Part A, ask: "what steps did it take? Did it check policy?" Then run Part B and compare. Show the skill body in the code.
+Both parts run the exact same agent loop. The only difference is the `system` parameter:
+
+```python
+# Part A — no skill
+client.messages.create(
+    system="You are a procurement analyst. Use tools to answer.",
+    ...
+)
+
+# Part B — with skill
+client.messages.create(
+    system=VENDOR_HEALTH_SKILL,  # ← the skill body goes here
+    ...
+)
+```
+
+The skill body is just a string. When Claude reads it as the system prompt, it follows the numbered steps instead of deciding for itself. That is the entire mechanism — there is no special "skill mode" in the API.
+
+### Why Part A misses the policy check
+
+Part A's system prompt says "use tools to answer." Claude decides what's relevant. For a vendor health question, it queries the database — but it may not think to search policy documents unless explicitly told.
+
+Part B's system prompt says "follow these 4 steps EXACTLY" — step 4 is the policy search. Claude has no choice. The policy check happens every single time.
+
+```
+Part A — 2 tool calls (missed policy):        Part B — 4 tool calls (skill):
+  query_database (vendor details)               query_database (vendor details)
+  query_database (invoices)                     query_database (open POs)
+  ✗ no policy check                             query_database (overdue invoices)
+                                                search_knowledge_base ← catches the violation
+```
+
+The compliance issue — 45-day payment terms on a high-risk vendor — only surfaces in Part B.
+
+> **Presenter note:** 30 minutes. After Part A, ask: "did it check policy?" Then run Part B. Point to the compliance violation in the Part B output — that is what a raw agent would have missed. Then show the `VENDOR_HEALTH_SKILL` string in the code and say: "this string is the skill."
 
 ---
 
@@ -436,14 +517,63 @@ The pattern is the same. The production version adds scale, multi-tenancy, and r
 python3 exercises/04-orchestration/exercise.py
 ```
 
+### What is actually happening — two Claude calls per goal
+
+For each goal the exercise makes **two separate API calls**:
+
+**Call 1 — the router**
+
+The code scans `skills/*/SKILL.md` and builds an index — just names and descriptions, no bodies:
+
+```
+- vendor-health:      Check the health of a specific vendor...
+- overdue-report:     Generate a report of all overdue invoices...
+- procurement-audit:  Run a full procurement health audit...
+- my-first-skill:     ???
+```
+
+It gives this index to Claude as the system prompt, along with a synthetic tool called `invoke_skill`. Claude reads the goal, matches it to the best description, and calls `invoke_skill("vendor-health")`. That's it — one tool call, no loop needed.
+
+**Call 2 — the skill executor**
+
+The code loads `skills/vendor-health/SKILL.md`, strips the frontmatter, and uses the body as the system prompt for a full agent loop with real tools. Claude now follows the skill's fixed steps exactly as in Exercise 2.
+
+```
+Goal: "Check the health of vendor Eastern Parts Corp"
+       ↓
+Router call:
+  system = skill index (names + descriptions only)
+  tool   = invoke_skill
+  Claude calls invoke_skill("vendor-health")
+       ↓
+Executor call:
+  system = vendor-health skill body
+  tools  = query_database, search_knowledge_base
+  Claude follows 4 fixed steps → full report
+```
+
+### Why the body is never shown to the router
+
+The router only needs to pick the right skill — it does not need to know what the skill does step by step. Giving it the body would just add noise and cost tokens.
+
+The body is loaded only when the skill is actually executed. This is why changing a description changes routing, but changing a body never does.
+
 Three goals — each routes to a different skill:
 1. "Check the health of vendor Eastern Parts Corp" → `vendor-health`
 2. "Give me a report of all overdue invoices" → `overdue-report`
 3. "Run a full procurement audit" → `procurement-audit`
 
-Watch the routing reason for each. Then open `skills/vendor-health/SKILL.md` and compare the description to the goal. That match is all the router used.
+### Try it yourself
 
-> **Presenter note:** 20 minutes. After running, open one SKILL.md and edit the description. Run again — routing changes. Show that the body never changed, only the description.
+Open `skills/my-first-skill/SKILL.md` — replace every `???`:
+
+1. **description** — write exactly when this skill should be called
+2. **steps** — one or two `query_database` or `search_knowledge_base` calls
+3. **report section** — give it a heading
+
+Add your goal to the list in the exercise file, run again. Your skill appears in the index and gets routed to — no code change needed.
+
+> **Presenter note:** 20 minutes. After running, open `skills/vendor-health/SKILL.md` and change the description to something vague. Run again — routing breaks. That moment lands the lesson harder than any explanation.
 
 ---
 
