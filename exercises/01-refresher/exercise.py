@@ -74,7 +74,8 @@ console.print(Rule("[bold]Exercise 1 — Refresher: The Agent Loop[/bold]"))
 console.print("[dim]Same loop as Session 1. Tools + stop_reason. Let's move fast.[/dim]\n")
 
 questions = [
-    "Which vendors have a High risk rating?",
+    # Needs two tool calls — first checks overdue invoices, then looks up vendor policy
+    "List all overdue invoices and tell me what our late payment policy says about them.",
     # TODO: uncomment the line below and run again — what tool does the agent call?
     # "What is our policy for high-risk vendors?",
 ]
