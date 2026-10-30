@@ -1,0 +1,5 @@
+Three-Way Match Process
+
+All invoices must be matched against the purchase order and goods receipt before payment.
+Mismatches above 5% are held for manual review.
+Automatic payment runs occur every Friday.

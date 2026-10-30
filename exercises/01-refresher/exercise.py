@@ -80,9 +80,9 @@ questions = [
     # Case 1 — both tools independent: Claude requests both in one go, 2 turns total
     "List all overdue invoices and tell me what our late payment policy says about them.",
 
-    # Case 2 — chained: find the overdue invoice first, then look up that vendor's policy risk
-    # Claude must see the invoice result before it knows which vendor policy to search for
-    "Find the largest overdue invoice, then tell me what our policy says about that vendor's risk level.",
+    # Case 2 — chained: Claude must use the result of Turn 1 to decide Turn 2
+    # It cannot search policy until it knows which vendor has the highest invoice total
+    "Find the vendor with the highest total invoice amount, then search our policy for that vendor's risk level.",
 ]
 
 for q in questions:

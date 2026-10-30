@@ -1,0 +1,5 @@
+Late Payment Policy
+
+Invoices overdue by more than 30 days must be escalated to the finance team.
+A penalty of 2% per month applies to overdue amounts.
+Vendors with 3 or more overdue invoices are flagged for review.

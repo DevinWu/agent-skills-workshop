@@ -9,25 +9,21 @@ import os
 import sqlite3
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "../data/erp.db")
+POLICIES_DIR = os.path.join(os.path.dirname(__file__), "../data/policies")
 
-POLICIES = [
-    {
-        "title": "Late Payment Policy",
-        "text": "Invoices overdue by more than 30 days must be escalated to the finance team. A penalty of 2% per month applies. Vendors with 3+ overdue invoices are flagged for review.",
-    },
-    {
-        "title": "High-Risk Vendor Policy",
-        "text": "Vendors rated High risk require dual approval for any PO above $10,000. Quarterly audits are mandatory. Payment terms cannot exceed 30 days for High-risk vendors.",
-    },
-    {
-        "title": "Vendor Onboarding Policy",
-        "text": "New vendors must provide tax registration, insurance certificate, and bank details. A risk assessment is conducted before the first PO is raised. Onboarding takes 5-10 business days.",
-    },
-    {
-        "title": "Three-Way Match Process",
-        "text": "All invoices must be matched against the PO and goods receipt before payment. Mismatches above 5% are held for manual review. Automatic payment runs every Friday.",
-    },
-]
+
+def _load_policies() -> list[dict]:
+    policies = []
+    for filename in sorted(os.listdir(POLICIES_DIR)):
+        if not filename.endswith(".txt"):
+            continue
+        text = open(os.path.join(POLICIES_DIR, filename)).read().strip()
+        title, _, body = text.partition("\n")
+        policies.append({"title": title.strip(), "text": body.strip()})
+    return policies
+
+
+POLICIES = _load_policies()
 
 
 # ── Tool 1: Query Database ────────────────────────────────────────────────

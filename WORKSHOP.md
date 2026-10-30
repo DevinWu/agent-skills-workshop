@@ -98,7 +98,7 @@ query_database        — run SQL against the ERP database
 search_knowledge_base — keyword search over procurement policy documents
 ```
 
-Four policy documents in `pipeline/tools.py`:
+Four policy documents in `data/policies/` (loaded from disk by `pipeline/tools.py`):
 - Late Payment Policy
 - High-Risk Vendor Policy
 - Vendor Onboarding Policy
@@ -595,7 +595,53 @@ The pattern is identical. Production adds scale, multi-tenancy, and resilience.
 > - Add a new SKILL.md and it appears in the index automatically — no code change
 
 ```bash
-python3 exercises/04-orchestration/exercise.py
+# Terminal 1 — boot the orchestrator (keep this running)
+python3 exercises/04-orchestration/orchestrator.py
+
+# Terminal 2 — fire goals at it
+python3 exercises/04-orchestration/client.py
+```
+
+Watch Terminal 1. The orchestrator boots, loads all skills into memory, and waits. When you run the client in Terminal 2, goals arrive one by one — the orchestrator routes each one and executes the right skill. Answers come back to Terminal 2.
+
+### How it all connects
+
+```
+BOOT  (orchestrator.py starts — Terminal 1)
+─────────────────────────────────────────────────────────────
+skills/vendor-health/SKILL.md      ──┐
+skills/overdue-report/SKILL.md     ──┼──▶  Skill Index (name + description only)
+skills/procurement-audit/SKILL.md  ──┤     bodies stay on disk until needed
+skills/my-first-skill/SKILL.md     ──┘
+
+Listening on localhost:9999...
+
+─────────────────────────────────────────────────────────────
+GOAL ARRIVES  (client.py sends — Terminal 2)
+─────────────────────────────────────────────────────────────
+
+  "Check the health of vendor Eastern Parts Corp"
+                        │
+                        ▼
+            ┌───────────────────────┐
+            │   Orchestrator LLM    │  ← sees Skill Index + invoke_skill tool
+            │                       │
+            │  invoke_skill(        │
+            │    "vendor-health"    │
+            │  )                    │
+            └───────────┬───────────┘
+                        │  intercepted — never leaves the service
+                        ▼
+            ┌───────────────────────┐
+            │   Worker LLM          │  ← system = vendor-health body
+            │                       │
+            │  Turn 1: tool_use     │  query_database × 3
+            │  Turn 2: tool_use     │  search_knowledge_base
+            │  Turn 3: end_turn     │  → structured report
+            └───────────┬───────────┘
+                        │
+                        ▼
+              answer sent back to client (Terminal 2)
 ```
 
 ### What is actually happening — two Claude calls per goal
@@ -652,9 +698,9 @@ Open `skills/my-first-skill/SKILL.md` — replace every `???`:
 2. **steps** — one or two `query_database` or `search_knowledge_base` calls
 3. **report section** — give it a heading
 
-Add your goal to the list in the exercise file, run again. Your skill appears in the index and gets routed to — no code change needed.
+Add your goal to the goals list in `client.py`, restart both terminals. Your skill appears in the orchestrator's index automatically — no other code change needed.
 
-> **Presenter note:** 20 minutes. After running, open `skills/vendor-health/SKILL.md` and change the description to something vague. Run again — routing breaks. That moment lands the lesson harder than any explanation.
+> **Presenter note:** 20 minutes. After the demo, open `skills/vendor-health/SKILL.md` and change the description to something vague. Restart the orchestrator, run the client again — routing breaks. That moment lands the lesson harder than any explanation.
 
 ---
 

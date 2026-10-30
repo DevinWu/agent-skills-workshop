@@ -1,0 +1,5 @@
+High-Risk Vendor Policy
+
+Vendors rated High risk require dual approval for any purchase order above $10,000.
+Quarterly audits are mandatory for all High-risk vendors.
+Payment terms cannot exceed 30 days for High-risk vendors.

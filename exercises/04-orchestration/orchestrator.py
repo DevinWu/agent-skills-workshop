@@ -1,24 +1,18 @@
 """
-Exercise 4 — The Orchestrator-Workers Pattern
-===============================================
-This is Anthropic's orchestrator-workers pattern:
-  "A central LLM that delegates to worker LLMs dynamically."
+Exercise 4 — Orchestrator (run this first)
+===========================================
+Terminal 1:  python3 exercises/04-orchestration/orchestrator.py
+Terminal 2:  python3 exercises/04-orchestration/client.py
 
-The orchestrator:
-  1. Scans skills/*/SKILL.md — reads name + description from each
-  2. Builds a skill index and gives it to the orchestrator LLM
-  3. Orchestrator LLM reads descriptions, calls invoke_skill("best-match")
-  4. The matching skill (worker) runs with its fixed steps and real tools
-
-The description on each SKILL.md IS the routing signal.
-Change the description → change what gets routed there.
-
-Run:  python exercises/04-orchestration/exercise.py
+The orchestrator boots up, loads all skills into memory, then listens on
+localhost:9999 for goals from the client. Each goal is routed to the right
+worker skill automatically based on description matching.
 """
 
 import os
 import sys
 import re
+import socket
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 from dotenv import load_dotenv
@@ -35,9 +29,11 @@ console = Console()
 client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 SKILLS_DIR = os.path.join(os.path.dirname(__file__), "../../skills")
+HOST = "localhost"
+PORT = 9999
 
 
-# ── Load skills ───────────────────────────────────────────────────────────
+# ── Load skills into memory ───────────────────────────────────────────────
 
 def load_skills() -> list[dict]:
     skills = []
@@ -125,11 +121,9 @@ def execute_skill(skill_body: str, goal: str, skill_name: str) -> str:
             return ""
 
 
-# ── Boot the orchestrator ─────────────────────────────────────────────────
+# ── Boot ──────────────────────────────────────────────────────────────────
 
-console.print(Rule("[bold]Exercise 4 — The Orchestrator-Workers Pattern[/bold]"))
-console.print()
-console.print(Rule("[dim]Phase 1 — Orchestrator boots up[/dim]"))
+console.print(Rule("[bold]Orchestrator — booting up[/bold]"))
 console.print("[dim]Scanning skills/ directory...[/dim]")
 
 skills = load_skills()
@@ -137,67 +131,51 @@ skills = load_skills()
 console.print()
 for s in skills:
     console.print(f"  [green]✓[/green] loaded [bold]{s['name']}[/bold]")
-    console.print(f"    [dim]description: {s['description']}[/dim]")
+    console.print(f"    [dim]{s['description']}[/dim]")
 
 console.print()
 console.print(Panel(
     "\n".join(f"  {s['name']}: {s['description']}" for s in skills),
-    title=f"[bold]Skill Index — {len(skills)} workers registered[/bold]",
+    title=f"[bold]Skill Index — {len(skills)} workers in memory[/bold]",
     border_style="green"
 ))
-console.print("[dim]Orchestrator ready. Waiting for goals...[/dim]\n")
-
-# ── Now send goals ────────────────────────────────────────────────────────
-
-console.print(Rule("[dim]Phase 2 — Goals come in[/dim]"))
 console.print()
 
-goals = [
-    "Check the health of vendor Eastern Parts Corp",
-    "Give me a report of all overdue invoices",
-    "Run a full procurement audit",
-    # ✏️  Once you've filled in skills/my-first-skill/SKILL.md,
-    #     add a goal here that matches your description and run again:
-    # "???",
-]
+# ── Listen for goals ──────────────────────────────────────────────────────
 
-for goal in goals:
-    console.print(Rule(f"[cyan]{goal}[/cyan]"))
-    console.print("[dim]Orchestrator routing...[/dim]")
-    skill_name, reason = route(goal, skills)
-    console.print(f"  [dim]invoke_skill([/dim][bold green]\"{skill_name}\"[/bold green][dim])[/dim]  — {reason}")
-    console.print(f"  [dim]Worker [{skill_name}] starting...[/dim]")
-    if not skill:
-        console.print(f"  [red]Skill '{skill_name}' not found[/red]")
-        continue
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+sock.bind((HOST, PORT))
+sock.listen(1)
 
-    answer = execute_skill(skill["body"], goal, skill_name)
-    console.print(Panel(answer, title=f"[bold]{skill_name}[/bold]", border_style="green"))
-    console.print()
+console.print(f"[bold green]Listening on {HOST}:{PORT}[/bold green] — waiting for goals from client...")
+console.print("[dim]Run:  python3 exercises/04-orchestration/client.py[/dim]\n")
 
-console.print(Panel(
-    "This is Anthropic's orchestrator-workers pattern.\n"
-    "The orchestrator LLM reads DESCRIPTIONS — not skill bodies — to delegate.\n"
-    "Each skill is a worker — it receives the goal and runs fixed steps.\n\n"
-    "Change a description → change what gets delegated there.\n\n"
-    "Production differences:\n"
-    "  - Skills loaded from object storage (S3/Redis), not local files\n"
-    "  - Per-tenant allowlists control which skills (workers) are available\n"
-    "  - Orchestrator model and worker model can be configured independently\n"
-    "  - invoke_skill is a synthetic tool — intercepted by the service, never leaves it",
-    title="[bold]Orchestrator-Workers Pattern[/bold]",
-    border_style="cyan"
-))
+while True:
+    conn, _ = sock.accept()
+    with conn:
+        data = b""
+        while chunk := conn.recv(4096):
+            data += chunk
+        goal = data.decode().strip()
+        if not goal:
+            continue
 
-console.print(Panel(
-    "✏️  Your turn — open  skills/my-first-skill/SKILL.md\n\n"
-    "Replace every ??? with real content:\n"
-    "  1. Give it a description that clearly says WHEN to use it\n"
-    "  2. Write 1-2 steps (query_database or search_knowledge_base)\n"
-    "  3. Give the report section a name\n\n"
-    "Then run this exercise again.\n"
-    "Your skill will appear in the index automatically — no code change needed.\n\n"
-    "Try asking a goal that matches your description and watch it get routed there.",
-    title="[bold yellow]Try it yourself[/bold yellow]",
-    border_style="yellow"
-))
+        console.print(Rule(f"[cyan]{goal}[/cyan]"))
+        console.print("[dim]Routing...[/dim]")
+
+        skill_name, reason = route(goal, skills)
+        console.print(f"  [dim]invoke_skill([/dim][bold green]\"{skill_name}\"[/bold green][dim])[/dim]  — {reason}")
+
+        skill = next((s for s in skills if s["name"] == skill_name), None)
+        if not skill:
+            error = f"No skill named '{skill_name}' — check descriptions"
+            console.print(f"  [red]{error}[/red]")
+            conn.sendall(error.encode())
+            continue
+
+        console.print(f"  [dim]Worker [{skill_name}] starting...[/dim]")
+        answer = execute_skill(skill["body"], goal, skill_name)
+        console.print(Panel(answer, title=f"[bold]{skill_name}[/bold]", border_style="green"))
+        console.print()
+        conn.sendall(answer.encode())
