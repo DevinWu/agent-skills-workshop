@@ -413,59 +413,50 @@ The compliance issue — 45-day payment terms on a high-risk vendor — only sur
 
 > **Key points to land:**
 > - Not everything needs a skill
-> - A simple question with one tool call does not need a skill
-> - Packaging for the sake of it adds complexity with no benefit
-> - The test: does this workflow have multiple steps that must always happen?
+> - A skill is a workflow — workflows add predictability, not flexibility
+> - If you don't need predictability for this task, you don't need a skill
+> - Anthropic's own principle: find the simplest solution, add complexity only when it demonstrably improves outcomes
+
+### What Anthropic says
+
+From Anthropic's guide on building effective agents:
+
+> "Workflows offer predictability and consistency for well-defined tasks, whereas agents are the better option when flexibility and model-driven decision-making are needed."
+
+> "Find the simplest solution possible, and only increase complexity when needed."
+
+A skill IS a workflow — it fixes the steps and makes the output predictable. That is exactly what you want for a procurement audit that runs every Monday. It is exactly what you do NOT want for a one-off lookup question.
 
 ### The overkill test
 
-Ask yourself three questions before building a skill:
+Before building a skill, ask:
 
 ```
 1. Does this require multiple steps that must always happen?
 2. Does the output format need to be consistent every time?
-3. Will this same workflow run repeatedly?
+3. Will this same workflow run repeatedly in production?
 ```
 
-If any answer is **no** — a skill is probably overkill.
-
-### The vendor-health skill — overkill for a simple question
-
-The vendor-health skill runs 4 steps:
-1. Query vendor details
-2. Query open POs
-3. Query overdue invoices
-4. Search policy
-
-That makes sense for a full health check.
-
-But if the question is simply **"What is the risk rating of Eastern Parts Corp?"** — you only need step 1. The skill forces 3 unnecessary steps.
-
-```
-Question: "What is the risk rating of Eastern Parts Corp?"
-
-With skill:   4 tool calls, full report — overkill
-Without skill: 1 tool call, direct answer — correct
-```
+If any answer is **no** — a raw agent is simpler and more appropriate.
 
 ### When to use what
 
 ```
-Use a raw tool call when:
+Use a raw agent when:
+  ✓ The task is exploratory or one-off
   ✓ One tool call answers the question
-  ✓ The steps don't need to be fixed
-  ✓ You're answering a one-off question
+  ✓ You need flexibility — steps may vary by question
 
 Use a skill when:
-  ✓ Multiple steps must always happen
-  ✓ The output must be consistent
-  ✓ The same workflow runs repeatedly
-  ✓ You need auditability — you can prove what ran
+  ✓ Multiple steps must always happen in the same order
+  ✓ The output format must be consistent every time
+  ✓ The same workflow runs repeatedly in production
+  ✓ You need auditability — you must prove what ran
 
 A skill is overkill when:
   ✗ One tool call answers the question
-  ✗ You're packaging for packaging's sake
-  ✗ The workflow is exploratory and changes every time
+  ✗ You're packaging for the sake of it
+  ✗ The task is exploratory and changes every time
 ```
 
 > **Pop Quiz:** "When is a skill overkill?"
@@ -473,17 +464,17 @@ A skill is overkill when:
 > - B) When a single tool call answers the question
 > - C) When you're using more than one tool
 >
-> Answer: B — if one tool call solves it, the overhead of a skill adds nothing.
+> Answer: B — Anthropic's principle: find the simplest solution. If one tool call solves it, a skill adds complexity with no benefit.
 
 ---
 
 ## 1:45 — Exercise 3: Skill vs No Skill
 
 > **Key points to land:**
-> - Same simple question, two approaches — skill vs direct
-> - The skill ran 4 steps for a 1-step question
-> - Direct was faster and more appropriate
-> - The lesson: match the tool to the task
+> - Same goal, 3 runs without skill, 3 runs with skill
+> - Without skill: the policy check gets skipped — not every time, but sometimes
+> - With skill: the policy check is guaranteed — impossible to skip
+> - The lesson: a skill doesn't just add steps, it guarantees them
 
 ```bash
 python3 exercises/03-routing/exercise.py
