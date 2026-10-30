@@ -197,6 +197,48 @@ If you forget to check `stop_reason` and just return the response immediately, y
 > - The skill body becomes the system prompt — Claude follows it like instructions
 > - Skills are for repeatable, auditable workflows
 
+### Why skills and not just tool chaining?
+
+This is the first question anyone asks. Tool chaining already works — you saw it in Exercise 1. So why add skills on top?
+
+The answer: **tool chaining is what runs inside a skill. A skill just puts a fence around it.**
+
+Without a skill, the agent decides which tools to call and in what order — every single run:
+
+```
+Goal: "Check the health of Eastern Parts Corp"
+
+Run 1:  query_database → query_database → end_turn
+Run 2:  query_database → query_database → query_database → search_knowledge_base → end_turn
+Run 3:  query_database → end_turn   ← skipped steps, missed the policy check
+```
+
+Tool chaining is flexible — great for exploration. But flexible means unpredictable. You cannot guarantee step 4 (the policy check) will always happen.
+
+With a skill, the steps are fixed in the SKILL.md body. The agent still chains tools — but it follows your instructions, not its own judgement:
+
+```
+Goal: "Check the health of Eastern Parts Corp"
+
+Run 1:  query_database → query_database → query_database → search_knowledge_base → end_turn
+Run 2:  query_database → query_database → query_database → search_knowledge_base → end_turn
+Run 3:  query_database → query_database → query_database → search_knowledge_base → end_turn
+```
+
+Same 4 steps. Every time. The policy check cannot be skipped.
+
+```
+Tool chaining alone          With a skill
+──────────────────────────────────────────────────────
+Agent decides the steps      You decide the steps
+Steps vary every run         Steps are fixed every run
+Output format varies         Output format is consistent
+Hard to audit                Easy to audit — you know exactly what ran
+Great for one-off questions  Right for repeated, production workflows
+```
+
+**Skills do not replace tool chaining. They control it.**
+
 ### The problem with a raw agent
 
 A raw agent is powerful but unpredictable:
