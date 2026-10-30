@@ -101,25 +101,18 @@ console.print(Rule("[bold]Part B — With Skill (steps are fixed)[/bold]"))
 console.print("[dim]Goal:[/dim]", GOAL)
 console.print()
 
-VENDOR_HEALTH_SKILL = """You are a procurement analyst.
+# Load the skill body directly from the SKILL.md file
+# This is exactly what the orchestration layer does in Exercise 4
+import re as _re
+_skill_path = os.path.join(os.path.dirname(__file__), "../../skills/vendor-health/SKILL.md")
+_skill_content = open(_skill_path).read()
+VENDOR_HEALTH_SKILL = _re.sub(r"^---\n.*?\n---\n?", "", _skill_content, flags=_re.DOTALL).strip()
 
-Follow these steps EXACTLY to check a vendor's health:
-
-1. Query the database for the vendor's details (risk_rating, payment_terms, country)
-2. Query the database for their open purchase orders (count and total amount)
-3. Query the database for any overdue invoices linked to their POs
-4. Search the knowledge base for the policy on high-risk vendors
-
-Then write a short report with:
-## Vendor Profile
-## Open Orders
-## Overdue Invoices
-## Policy Notes
-## Risk Assessment (one sentence)
-"""
+console.print(f"[dim]Loaded skill body from:[/dim] skills/vendor-health/SKILL.md")
+console.print()
 
 # ✏️  Your turn — open  skills/vendor-health/SKILL.md
-#     You'll see the same 4 steps live there as a real skill file.
+#     The body above is loaded directly from that file.
 #     Try adding a 5th step:
 #       5. Search the knowledge base for the three-way match process
 #     Then run Part B again. Does the report change?
