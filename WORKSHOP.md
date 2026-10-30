@@ -531,6 +531,7 @@ Two phases:
 Goal: "Run a full procurement audit"
        ↓
 Orchestrator scans skills/*/SKILL.md — builds index of names + descriptions
+(workshop: rebuilt every run from disk — production: loaded once at startup from S3/Redis)
        ↓
 Orchestrator LLM reads index, calls invoke_skill("procurement-audit")
        ↓
