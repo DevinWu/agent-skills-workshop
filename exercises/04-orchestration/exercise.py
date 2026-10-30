@@ -1,18 +1,17 @@
 """
-Exercise 4 — The Orchestration Layer
-=======================================
-How does the agent know WHICH skill to call?
+Exercise 4 — The Orchestrator-Workers Pattern
+===============================================
+This is Anthropic's orchestrator-workers pattern:
+  "A central LLM that delegates to worker LLMs dynamically."
 
-The orchestration layer:
+The orchestrator:
   1. Scans skills/*/SKILL.md — reads name + description from each
-  2. Builds a skill index and gives it to the router LLM
-  3. Router LLM reads descriptions and calls invoke_skill("best-match")
-  4. Orchestrator loads that skill's body, runs the agent loop with real tools
+  2. Builds a skill index and gives it to the orchestrator LLM
+  3. Orchestrator LLM reads descriptions, calls invoke_skill("best-match")
+  4. The matching skill (worker) runs with its fixed steps and real tools
 
 The description on each SKILL.md IS the routing signal.
-Change the description → change what gets called.
-
-This is exactly how production orchestration services work.
+Change the description → change what gets routed there.
 
 Run:  python exercises/04-orchestration/exercise.py
 """
@@ -128,7 +127,7 @@ def execute_skill(skill_body: str, goal: str, skill_name: str) -> str:
 
 # ── Run three different goals ─────────────────────────────────────────────
 
-console.print(Rule("[bold]Exercise 4 — The Orchestration Layer[/bold]"))
+console.print(Rule("[bold]Exercise 4 — The Orchestrator-Workers Pattern[/bold]"))
 
 skills = load_skills()
 index_display = "\n".join(f"  - {s['name']}: {s['description'][:60]}..." for s in skills)
@@ -159,16 +158,16 @@ for goal in goals:
     console.print()
 
 console.print(Panel(
-    "The router LLM reads DESCRIPTIONS — not skill bodies — to pick the right skill.\n"
-    "The description IS the routing signal.\n\n"
-    "Change a description → change what gets routed there.\n"
-    "This is the same pattern production orchestration services use at scale.\n\n"
-    "Key difference in production:\n"
+    "This is Anthropic's orchestrator-workers pattern.\n"
+    "The orchestrator LLM reads DESCRIPTIONS — not skill bodies — to delegate.\n"
+    "Each skill is a worker — it receives the goal and runs fixed steps.\n\n"
+    "Change a description → change what gets delegated there.\n\n"
+    "Production differences:\n"
     "  - Skills loaded from object storage (S3/Redis), not local files\n"
-    "  - Per-tenant allowlists control which skills are available\n"
-    "  - Router model and skill model can be configured independently\n"
+    "  - Per-tenant allowlists control which skills (workers) are available\n"
+    "  - Orchestrator model and worker model can be configured independently\n"
     "  - invoke_skill is a synthetic tool — intercepted by the service, never leaves it",
-    title="[bold]How orchestration works[/bold]",
+    title="[bold]Orchestrator-Workers Pattern[/bold]",
     border_style="cyan"
 ))
 

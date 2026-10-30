@@ -495,91 +495,102 @@ After running, ask: for which question WOULD you use the vendor-health skill? �
 
 ---
 
-## 2:10 — Part 4: The Orchestration Layer
+## 2:10 — Part 4: The Orchestrator-Workers Pattern
 
 > **Key points to land:**
-> - The orchestration layer routes a goal to the right skill automatically
-> - It reads skill descriptions — not bodies — to decide
-> - The description on each SKILL.md is the routing signal
-> - This is the same routing lesson as tool descriptions in Session 1, one level up
+> - This is Anthropic's **orchestrator-workers** pattern — a central LLM delegates to worker LLMs
+> - The orchestrator reads skill descriptions and routes the goal to the right skill (worker)
+> - Each skill is a worker — it receives the goal and executes fixed steps
+> - The description on each SKILL.md is the routing signal — same lesson as tool descriptions, one level up
 
-### What the orchestration layer does
+### Anthropic's definition
+
+From Anthropic's guide on building effective agents:
+
+> "Orchestrator-workers: a central LLM that delegates to worker LLMs dynamically."
+
+That is exactly what Exercise 4 builds:
+
+```
+Orchestrator LLM                    Worker (skill)
+─────────────────────────────────────────────────────────
+Reads goal                          Receives goal
+Reads skill index (descriptions)    Follows fixed steps
+Calls invoke_skill("vendor-health") Runs query_database × 3
+                                    Runs search_knowledge_base
+                                    Returns structured report
+```
+
+Two phases:
+1. **Routing** — orchestrator LLM reads descriptions, picks the right skill
+2. **Execution** — skill body becomes the worker's system prompt, runs with real tools
+
+### The full picture
 
 ```
 Goal: "Run a full procurement audit"
        ↓
-Orchestration layer scans skills/*/SKILL.md
-Builds a skill index:
-  - vendor-health:     Check the health of a specific vendor...
-  - overdue-report:    Generate a report of all overdue invoices...
-  - procurement-audit: Run a full procurement health audit...
+Orchestrator scans skills/*/SKILL.md — builds index of names + descriptions
        ↓
-Router LLM reads the index, calls invoke_skill("procurement-audit")
+Orchestrator LLM reads index, calls invoke_skill("procurement-audit")
        ↓
-Orchestration layer loads procurement-audit/SKILL.md body
-Injects it as the system prompt
+Worker starts: procurement-audit/SKILL.md body loaded as system prompt
+Worker runs fixed steps with real tools — query_database, search_knowledge_base
        ↓
-Skill runs with real tools — fixed steps, consistent output
+Structured report returned
 ```
-
-Two phases:
-1. **Routing** — router LLM reads descriptions, calls `invoke_skill`
-2. **Execution** — skill body becomes system prompt, agent loop runs with real tools
 
 ### invoke_skill — a synthetic tool
 
-`invoke_skill` is not a real tool. It never leaves the orchestration layer. When Claude calls it, the layer intercepts the call, loads the skill, and continues. Claude never knows this happened.
+`invoke_skill` is not a real tool. It never leaves the orchestration layer. When the orchestrator calls it, the layer intercepts, loads the skill body, and starts the worker. The orchestrator never knows the worker's internals.
 
 ```
-Claude calls: invoke_skill("procurement-audit")
-               ↓
-Orchestration layer intercepts
-Loads skills/procurement-audit/SKILL.md
-Sets body as system prompt
-Continues the loop — Claude now follows skill instructions
+Orchestrator calls: invoke_skill("procurement-audit")
+                     ↓
+Layer intercepts — loads skills/procurement-audit/SKILL.md
+Sets body as worker's system prompt
+Worker runs the agent loop with real tools
 ```
 
 ### The description IS the routing signal
 
-The orchestration layer gives the router LLM only the skill index — names and descriptions. Not the bodies. Claude reads descriptions and picks.
-
-Change a description → change what gets routed there. This is the same lesson as tool descriptions in Session 1 — one level up.
+The orchestrator only sees the skill index — names and descriptions. Not the bodies.
 
 ```
 Session 1:  tool descriptions  → route to the right TOOL
-Session 2:  skill descriptions → route to the right SKILL
+Session 2:  skill descriptions → route to the right SKILL (worker)
 ```
 
-### How production orchestration services work
+Change a description → change what gets routed there.
 
-What you build in Exercise 4 is a faithful simplification of how real orchestration services work:
+### Workshop vs production
 
 ```
 Workshop                          Production
 ────────────────────────────────────────────────────────
 Skills loaded from local files    Skills loaded from S3/Redis
 One model for everything          Per-skill model config in frontmatter
-No tenant scoping                 Per-tenant allowlists — which skills are available
-invoke_skill intercepted in code  invoke_skill intercepted by the service layer
+No tenant scoping                 Per-tenant allowlists — which skills available
+invoke_skill intercepted in code  invoke_skill intercepted by service layer
 ```
 
-The pattern is the same. The production version adds scale, multi-tenancy, and resilience.
+The pattern is identical. Production adds scale, multi-tenancy, and resilience.
 
-> **Pop Quiz:** "How does the router know which skill to call?"
-> - A) You hardcode the routing logic
-> - B) It reads the description on each SKILL.md and picks the best match
-> - C) It tries all skills and picks the best result
+> **Pop Quiz:** "What is the orchestrator's job?"
+> - A) Run all the tool calls
+> - B) Read skill descriptions and delegate to the right worker skill
+> - C) Execute the fixed steps in the skill body
 >
-> Answer: B — same as tool descriptions in Session 1. The description is the only signal.
+> Answer: B — the orchestrator delegates, it does not execute. The worker (skill) executes.
 
 ---
 
-## 2:30 — Exercise 4: Orchestration in Action
+## 2:30 — Exercise 4: Orchestrator-Workers in Action
 
 > **Key points to land:**
-> - Watch the skill index print — those are the descriptions the router reads
-> - Each goal routes to a different skill — based entirely on description matching
-> - The skill body is never shown to the router — only name and description
+> - Watch the skill index — those are the descriptions the orchestrator reads
+> - Each goal routes to a different worker skill — based entirely on description matching
+> - The skill body is never shown to the orchestrator — only name and description
 > - Add a new SKILL.md and it appears in the index automatically — no code change
 
 ```bash
