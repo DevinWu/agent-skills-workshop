@@ -403,7 +403,9 @@ Part A — 2 tool calls (missed policy):        Part B — 4 tool calls (skill):
 
 The compliance issue — 45-day payment terms on a high-risk vendor — only surfaces in Part B.
 
-> **Presenter note:** 30 minutes. After Part A, ask: "did it check policy?" Then run Part B. Point to the compliance violation in the Part B output — that is what a raw agent would have missed. Then show the `VENDOR_HEALTH_SKILL` string in the code and say: "this string is the skill."
+> **Important:** In this exercise we hardcoded the skill — the code explicitly loads `skills/vendor-health/SKILL.md` and uses it. There is no routing. We told the code exactly which skill to use. Exercise 4 is where the router LLM reads all skills and picks the right one automatically based on the goal.
+
+> **Presenter note:** 30 minutes. After Part A, ask: "did it check policy?" Then run Part B. Point to the compliance violation in the Part B output — that is what a raw agent would have missed. Then say: "we hardcoded this skill — Exercise 4 is where the routing happens automatically."
 
 ---
 

@@ -148,6 +148,8 @@ console.print(Panel(
     "No skill: the agent [yellow]chose[/yellow] what to check — steps vary every run.\n"
     "With skill: the agent [green]followed[/green] 4 fixed steps — same output every time.\n\n"
     "A skill = consistent, repeatable, auditable behaviour.\n\n"
+    "Note: we hardcoded the skill here — we told the code to load vendor-health directly.\n"
+    "Exercise 4 is where the router picks the right skill automatically from the goal.\n\n"
     "But wait — did we actually NEED a skill here?\n"
     "→ That's Exercise 3.",
     title="[bold]What you saw[/bold]",
