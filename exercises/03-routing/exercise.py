@@ -64,7 +64,9 @@ def run_agent(system_prompt: str, label: str) -> list[str]:
             for block in response.content:
                 if block.type == "tool_use":
                     tools_called.append(block.name)
-                    console.print(f"  [{label}] → [cyan]{block.name}[/cyan]")
+                    inp = block.input
+                    hint = inp.get("sql", inp.get("query", ""))[:80]
+                    console.print(f"  [{label}] → [cyan]{block.name}[/cyan]  [dim]{hint}[/dim]")
                     result = run_tool(block.name, block.input)
                     tool_results.append({
                         "type": "tool_result",
