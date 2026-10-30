@@ -144,35 +144,67 @@ Q: List all overdue invoices and tell me what our late payment policy says.
   → done
 ```
 
-### What is actually happening
+### Code walkthrough — open exercises/01-refresher/exercise.py
 
-When you call `client.messages.create(...)`, Claude reads your question and decides it cannot answer from memory — it needs data. It responds with `stop_reason = "tool_use"` and a list of tool calls it wants to make.
+The entire agent loop lives in the `run_agent` function. Here it is with annotations:
 
-Your loop intercepts this. It runs each tool, collects the results, and sends them back to Claude in the next message. Claude reads the results and now has what it needs to answer — so it responds with `stop_reason = "end_turn"` and the actual text.
+```python
+def run_agent(question: str) -> str:
+    messages = [{"role": "user", "content": question}]
+    #           ↑ start with just the user's question
 
-Step by step:
+    while True:
+        #      ↑ loop forever — we only exit when stop_reason = "end_turn"
+
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            system=SYSTEM_PROMPT,   # ← who Claude is and what it can do
+            tools=ALL_TOOLS,        # ← the tools Claude is allowed to call
+            messages=messages,      # ← the full conversation so far
+        )
+        # Claude reads everything and replies — but it may not be done yet
+
+        if response.stop_reason == "tool_use":
+            # Claude wants to call one or more tools
+            # It did NOT return an answer yet — we must run the tools and loop again
+
+            tool_results = []
+            for block in response.content:
+                if block.type == "tool_use":
+                    result = run_tool(block.name, block.input)
+                    #                 ↑ query_database or search_knowledge_base
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.id,  # ← ties result back to the request
+                        "content": result,
+                    })
+
+            messages.append({"role": "assistant", "content": response.content})
+            messages.append({"role": "user", "content": tool_results})
+            #                                ↑ send ALL tool results back together
+            # now loop — Claude reads the results and replies again
+
+        elif response.stop_reason == "end_turn":
+            # Claude is done — extract the text and return it
+            for block in response.content:
+                if hasattr(block, "text"):
+                    return block.text.strip()
+```
+
+### Where "both tools fired in a single loop turn"
+
+Look at this line in the output:
 
 ```
-Your code                         Claude
-──────────────────────────────────────────────────────────
-send question
-                                  "I need the database"
-                                  stop_reason = "tool_use"
-                                  tool_use: query_database(...)
-                                  tool_use: search_knowledge_base(...)
-run query_database(...)
-run search_knowledge_base(...)
-send tool results back
-                                  reads the results
-                                  "Now I can answer"
-                                  stop_reason = "end_turn"
-                                  text: "There are 3 overdue invoices..."
-return the answer
+stop_reason = 'tool_use'
+  → query_database
+  → search_knowledge_base
+stop_reason = 'end_turn'
 ```
 
-Two things to notice:
-1. **Both tools fired in a single loop turn.** Claude requested them together — your code ran them both and sent both results back at once.
-2. **Claude never touched the database directly.** It asked your code to run the query. Your code is the only thing that touches real systems.
+`stop_reason = 'tool_use'` appeared **once** — not twice. That means Claude requested both tools in a single response. The `for block in response.content` loop ran twice (once per tool), collected both results, and sent them back together. Then Claude replied with `end_turn`.
+
+The loop only turned **twice** total for this question — one `tool_use` turn, one `end_turn` turn.
 
 ### Why stop_reason matters
 
@@ -185,7 +217,7 @@ elif response.stop_reason == "end_turn":
 
 If you forget to check `stop_reason` and just return the response immediately, you get Claude's tool request back — not an answer. The loop exists entirely to handle `tool_use` turns until Claude reaches `end_turn`.
 
-> **Presenter note:** 15 minutes. Show the output, walk through the step-by-step diagram, then ask: "what happens if stop_reason is tool_use and we just return immediately?" Let someone answer before moving on.
+> **Presenter note:** 15 minutes. Open the file, point to `while True` and say "this is the loop." Point to `stop_reason == "tool_use"` and say "this is where tools run." Point to `stop_reason == "end_turn"` and say "this is the exit." Then run it and watch the output match exactly.
 
 ---
 
