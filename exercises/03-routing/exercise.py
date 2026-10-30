@@ -1,33 +1,29 @@
 """
-Exercise 3 — When is a Skill Overkill?
-=========================================
-Not everything needs a skill.
+Exercise 3 — Predictability: Skill vs No Skill
+=================================================
+A skill does not just add steps — it removes unpredictability.
 
-This exercise shows the same question answered two ways:
-  A) With the vendor-health skill (4 forced steps)
-  B) With a single tool call
+Without a skill, the agent decides what to check every run.
+Same question. Different steps. Different output. Every time.
 
-The question: "What is the risk rating of Eastern Parts Corp?"
+With a skill, the steps are fixed.
+Same question. Same steps. Same output. Every time.
 
-One answer is thorough. One is direct. Which one does the user actually need?
-
-A skill is overkill when:
-  - The answer needs ONE tool call
-  - The steps don't need to be fixed
-  - There is no repeated workflow to package
+This exercise runs the SAME question 3 times each way so you can see it yourself.
 
 Run:  python exercises/03-routing/exercise.py
 """
 
 import os
 import sys
+import re
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.panel import Panel
 from rich.rule import Rule
-import time
+from rich.table import Table
 
 load_dotenv()
 
@@ -37,14 +33,20 @@ from pipeline.tools import run_tool, ALL_TOOLS
 console = Console()
 client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
-QUESTION_SIMPLE  = "What is the risk rating of Eastern Parts Corp?"
-QUESTION_FULL    = "Check the health of our vendor Eastern Parts Corp."
+GOAL = "Check the health of our vendor Eastern Parts Corp."
+
+RAW_PROMPT = """You are a procurement analyst assistant.
+Use the tools available to answer the user's request."""
+
+_skill_path = os.path.join(os.path.dirname(__file__), "../../skills/vendor-health/SKILL.md")
+_skill_content = open(_skill_path).read()
+SKILL_PROMPT = re.sub(r"^---\n.*?\n---\n?", "", _skill_content, flags=re.DOTALL).strip()
 
 
-def run_agent(system_prompt: str, question: str, label: str) -> tuple[str, int, float]:
-    messages = [{"role": "user", "content": question}]
-    tool_calls = 0
-    start = time.time()
+def run_agent(system_prompt: str, label: str) -> list[str]:
+    """Run the agent, return the list of tool names called."""
+    messages = [{"role": "user", "content": GOAL}]
+    tools_called = []
 
     while True:
         response = client.messages.create(
@@ -54,12 +56,11 @@ def run_agent(system_prompt: str, question: str, label: str) -> tuple[str, int, 
             tools=ALL_TOOLS,
             messages=messages,
         )
-
         if response.stop_reason == "tool_use":
             tool_results = []
             for block in response.content:
                 if block.type == "tool_use":
-                    tool_calls += 1
+                    tools_called.append(block.name)
                     console.print(f"  [{label}] → [cyan]{block.name}[/cyan]")
                     result = run_tool(block.name, block.input)
                     tool_results.append({
@@ -69,67 +70,70 @@ def run_agent(system_prompt: str, question: str, label: str) -> tuple[str, int, 
                     })
             messages.append({"role": "assistant", "content": response.content})
             messages.append({"role": "user", "content": tool_results})
-
         elif response.stop_reason == "end_turn":
-            elapsed = time.time() - start
-            for block in response.content:
-                if hasattr(block, "text"):
-                    return block.text.strip(), tool_calls, elapsed
-            return "", tool_calls, elapsed
+            return tools_called
 
 
-# ── With skill (4 forced steps) ───────────────────────────────────────────
+RUNS = 3
 
-console.print(Rule("[bold]Exercise 3 — When is a Skill Overkill?[/bold]"))
-console.print(f"\n[bold cyan]With skill:[/bold cyan]  {QUESTION_FULL}")
-console.print(f"[bold cyan]Without skill:[/bold cyan] {QUESTION_SIMPLE}\n")
+# ── Without skill — run 3 times ───────────────────────────────────────────
 
-import re, os
-_skill_path = os.path.join(os.path.dirname(__file__), "../../skills/vendor-health/SKILL.md")
-_skill_content = open(_skill_path).read()
-VENDOR_HEALTH_SKILL = re.sub(r"^---\n.*?\n---\n?", "", _skill_content, flags=re.DOTALL).strip()
+console.print(Rule("[bold]Exercise 3 — Predictability: Skill vs No Skill[/bold]"))
+console.print(f"\n[bold cyan]Goal (same every run):[/bold cyan] {GOAL}\n")
+console.print(Rule("[yellow]Without skill — raw agent[/yellow]"))
 
-console.print(Rule("[dim]With vendor-health skill — full health check[/dim]"))
-answer_skill, calls_skill, time_skill = run_agent(VENDOR_HEALTH_SKILL, QUESTION_FULL, "skill")
-console.print(Panel(answer_skill, title=f"[bold]Skill answer ({calls_skill} tool calls, {time_skill:.1f}s)[/bold]", border_style="yellow"))
+raw_runs = []
+for i in range(1, RUNS + 1):
+    console.print(f"\n[dim]Run {i}:[/dim]")
+    tools = run_agent(RAW_PROMPT, f"run-{i}")
+    raw_runs.append(tools)
+
+# ── With skill — run 3 times ──────────────────────────────────────────────
+
+console.print()
+console.print(Rule("[green]With skill — fixed steps[/green]"))
+
+skill_runs = []
+for i in range(1, RUNS + 1):
+    console.print(f"\n[dim]Run {i}:[/dim]")
+    tools = run_agent(SKILL_PROMPT, f"skill-{i}")
+    skill_runs.append(tools)
+
+# ── Comparison table ──────────────────────────────────────────────────────
+
+console.print()
+console.print(Rule("[bold]Same goal — what actually ran[/bold]"))
+
+TOOL_SHORT = {"query_database": "query_db", "search_knowledge_base": "search_kb"}
+
+table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
+table.add_column("Run", width=6)
+table.add_column("Without skill", style="yellow", width=40)
+table.add_column("With skill", style="green", width=40)
+
+for i in range(RUNS):
+    raw  = " → ".join(TOOL_SHORT.get(t, t) for t in raw_runs[i])
+    skill = " → ".join(TOOL_SHORT.get(t, t) for t in skill_runs[i])
+    table.add_row(f"#{i+1}", raw, skill)
+
+console.print(table)
 console.print()
 
-# ── Without skill (agent decides) ────────────────────────────────────────
+# ── Check if raw runs were consistent ────────────────────────────────────
 
-# ✏️  Your turn — write a system prompt that answers the question directly.
-#     The goal is ONE tool call, not a full report.
-#     Hint: tell the agent to be direct and use the minimum tools needed.
-#
-# SIMPLE_PROMPT = """You are a procurement analyst assistant.
-# ??? — fill in the instruction that keeps this focused
-# """
-#
-# Uncomment and complete the block above, then uncomment the line below:
-# answer_direct, calls_direct, time_direct = run_agent(SIMPLE_PROMPT, QUESTION, "direct")
-
-# ── Reference solution (comment this out once you've written yours) ───────
-SIMPLE_PROMPT = """You are a procurement analyst assistant.
-Answer the question using the minimum tool calls needed. Be direct and concise."""
-
-console.print(Rule("[dim]Without skill — simple direct question[/dim]"))
-answer_direct, calls_direct, time_direct = run_agent(SIMPLE_PROMPT, QUESTION_SIMPLE, "direct")
-console.print(Panel(answer_direct, title=f"[bold]Direct answer ({calls_direct} tool call, {time_direct:.1f}s)[/bold]", border_style="green"))
-
-# ── The lesson ────────────────────────────────────────────────────────────
+raw_hits_policy   = all("search_knowledge_base" in r for r in raw_runs)
+skill_hits_policy = all("search_knowledge_base" in r for r in skill_runs)
 
 console.print(Panel(
-    f"Skill:  {calls_skill} tool calls, {time_skill:.1f}s — full health check, 4 steps forced\n"
-    f"Direct: {calls_direct} tool call,  {time_direct:.1f}s — answered 'what is the risk rating?'\n\n"
-    "The question decided the approach — not the other way around.\n\n"
-    "A skill adds value when:\n"
-    "  ✓ The workflow has multiple steps that must always happen\n"
-    "  ✓ The output format must be consistent\n"
-    "  ✓ The same workflow runs repeatedly\n\n"
-    "A skill is overkill when:\n"
-    "  ✗ One tool call answers the question\n"
-    "  ✗ The steps don't need to be fixed\n"
-    "  ✗ You're packaging for the sake of it\n\n"
-    "→ Exercise 4 shows how the orchestration service routes to the RIGHT skill.",
-    title="[bold]Skill vs No Skill[/bold]",
+    f"Without skill — policy check (search_knowledge_base) ran every time? "
+    f"[bold]{'✓ yes' if raw_hits_policy else '✗ no — skipped on some runs'}[/bold]\n"
+    f"With skill    — policy check ran every time? "
+    f"[bold]{'✓ yes' if skill_hits_policy else '✗ no'}[/bold]\n\n"
+    "A skill does not just add steps — it guarantees them.\n"
+    "The raw agent may skip the policy check depending on how it interprets the question.\n"
+    "The skill makes it impossible to skip.\n\n"
+    "That is what makes it safe to run in production — you know exactly what ran.\n\n"
+    "→ Exercise 4 shows how the orchestration layer picks the right skill automatically.",
+    title="[bold]What you saw[/bold]",
     border_style="cyan"
 ))
