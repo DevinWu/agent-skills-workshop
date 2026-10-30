@@ -109,7 +109,7 @@ def execute_skill(skill_body: str, goal: str, skill_name: str) -> str:
             tool_results = []
             for block in response.content:
                 if block.type == "tool_use":
-                    console.print(f"  [{skill_name}] → [cyan]{block.name}[/cyan]")
+                    console.print(f"  [dim][{skill_name}][/dim] → [cyan]{block.name}[/cyan]")
                     result = run_tool(block.name, block.input)
                     tool_results.append({
                         "type": "tool_result",
@@ -125,13 +125,31 @@ def execute_skill(skill_body: str, goal: str, skill_name: str) -> str:
             return ""
 
 
-# ── Run three different goals ─────────────────────────────────────────────
+# ── Boot the orchestrator ─────────────────────────────────────────────────
 
 console.print(Rule("[bold]Exercise 4 — The Orchestrator-Workers Pattern[/bold]"))
+console.print()
+console.print(Rule("[dim]Phase 1 — Orchestrator boots up[/dim]"))
+console.print("[dim]Scanning skills/ directory...[/dim]")
 
 skills = load_skills()
-index_display = "\n".join(f"  - {s['name']}: {s['description'][:60]}..." for s in skills)
-console.print(Panel(f"Loaded {len(skills)} skills:\n{index_display}", title="Skill Index", border_style="dim"))
+
+console.print()
+for s in skills:
+    console.print(f"  [green]✓[/green] loaded [bold]{s['name']}[/bold]")
+    console.print(f"    [dim]description: {s['description']}[/dim]")
+
+console.print()
+console.print(Panel(
+    "\n".join(f"  {s['name']}: {s['description']}" for s in skills),
+    title=f"[bold]Skill Index — {len(skills)} workers registered[/bold]",
+    border_style="green"
+))
+console.print("[dim]Orchestrator ready. Waiting for goals...[/dim]\n")
+
+# ── Now send goals ────────────────────────────────────────────────────────
+
+console.print(Rule("[dim]Phase 2 — Goals come in[/dim]"))
 console.print()
 
 goals = [
@@ -144,11 +162,11 @@ goals = [
 ]
 
 for goal in goals:
-    console.print(f"[bold cyan]Goal:[/bold cyan] {goal}")
+    console.print(Rule(f"[cyan]{goal}[/cyan]"))
+    console.print("[dim]Orchestrator routing...[/dim]")
     skill_name, reason = route(goal, skills)
-    console.print(f"  → routed to [bold green]{skill_name}[/bold green] — {reason}")
-
-    skill = next((s for s in skills if s["name"] == skill_name), None)
+    console.print(f"  [dim]invoke_skill([/dim][bold green]\"{skill_name}\"[/bold green][dim])[/dim]  — {reason}")
+    console.print(f"  [dim]Worker [{skill_name}] starting...[/dim]")
     if not skill:
         console.print(f"  [red]Skill '{skill_name}' not found[/red]")
         continue
