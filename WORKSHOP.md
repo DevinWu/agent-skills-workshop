@@ -412,10 +412,10 @@ The compliance issue — 45-day payment terms on a high-risk vendor — only sur
 ## 1:30 — Part 3: When is a Skill Overkill?
 
 > **Key points to land:**
-> - Not everything needs a skill
-> - A skill is a workflow — workflows add predictability, not flexibility
-> - If you don't need predictability for this task, you don't need a skill
-> - Anthropic's own principle: find the simplest solution, add complexity only when it demonstrably improves outcomes
+> - A skill removes the agent's freedom — freedom means no guarantees
+> - Without a skill you cannot prove the policy check ran — with a skill you can
+> - Auditability is the production argument for skills, not just consistency
+> - Overkill = adding that guarantee when you don't need it
 
 ### What Anthropic says
 
@@ -425,46 +425,48 @@ From Anthropic's guide on building effective agents:
 
 > "Find the simplest solution possible, and only increase complexity when needed."
 
-A skill IS a workflow — it fixes the steps and makes the output predictable. That is exactly what you want for a procurement audit that runs every Monday. It is exactly what you do NOT want for a one-off lookup question.
+A skill IS a workflow — it fixes the steps and removes the agent's freedom to decide. That is exactly what you want when you need to guarantee a step ran. It is exactly what you do NOT need for a one-off question.
 
-### The overkill test
+### The real production argument: auditability
 
-Before building a skill, ask:
+Predictability is the surface benefit. The deeper reason skills exist in production is **auditability**.
 
-```
-1. Does this require multiple steps that must always happen?
-2. Does the output format need to be consistent every time?
-3. Will this same workflow run repeatedly in production?
-```
+Without a skill:
+> "Did the vendor health report check policy compliance?"
+> "I think so — the agent usually does."
 
-If any answer is **no** — a raw agent is simpler and more appropriate.
+With a skill:
+> "Did the vendor health report check policy compliance?"
+> "Yes. Step 4 is the policy check. It cannot be skipped."
+
+Your compliance team, your CFO, your auditor — they do not accept "I think so." A skill lets you say exactly what ran, every time.
 
 ### When to use what
 
 ```
 Use a raw agent when:
   ✓ The task is exploratory or one-off
-  ✓ One tool call answers the question
-  ✓ You need flexibility — steps may vary by question
+  ✓ One or two tool calls answer the question
+  ✓ You need flexibility — steps should adapt to the question
 
 Use a skill when:
   ✓ Multiple steps must always happen in the same order
   ✓ The output format must be consistent every time
-  ✓ The same workflow runs repeatedly in production
-  ✓ You need auditability — you must prove what ran
+  ✓ You need to prove what ran — compliance, audit, production
+  ✓ The same workflow runs repeatedly
 
 A skill is overkill when:
   ✗ One tool call answers the question
   ✗ You're packaging for the sake of it
-  ✗ The task is exploratory and changes every time
+  ✗ Nobody needs to audit what ran
 ```
 
 > **Pop Quiz:** "When is a skill overkill?"
 > - A) When the workflow has more than 3 steps
-> - B) When a single tool call answers the question
+> - B) When a single tool call answers the question and nobody needs to audit it
 > - C) When you're using more than one tool
 >
-> Answer: B — Anthropic's principle: find the simplest solution. If one tool call solves it, a skill adds complexity with no benefit.
+> Answer: B — Anthropic's principle: find the simplest solution. If one tool call solves it and auditability is not a requirement, a skill adds complexity with no benefit.
 
 ---
 

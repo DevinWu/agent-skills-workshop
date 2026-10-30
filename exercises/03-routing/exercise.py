@@ -1,15 +1,18 @@
 """
-Exercise 3 — Predictability: Skill vs No Skill
-=================================================
-A skill does not just add steps — it removes unpredictability.
+Exercise 3 — Auditability: Skill vs No Skill
+==============================================
+A skill does not just add steps — it makes them guaranteed and auditable.
 
-Without a skill, the agent decides what to check every run.
-Same question. Different steps. Different output. Every time.
+Without a skill, the agent has freedom.
+Freedom means it may or may not check policy — you cannot prove it did.
 
-With a skill, the steps are fixed.
-Same question. Same steps. Same output. Every time.
+With a skill, the policy check is step 4.
+It cannot be skipped. You can prove it ran. Every single time.
 
-This exercise runs the SAME question 3 times each way so you can see it yourself.
+That is the production argument for skills: not just consistency, but auditability.
+Can you tell your compliance team exactly what ran on every vendor report? With a skill — yes.
+
+This exercise runs the SAME goal 3 times each way so you can see it yourself.
 
 Run:  python exercises/03-routing/exercise.py
 """
@@ -78,8 +81,9 @@ RUNS = 3
 
 # ── Without skill — run 3 times ───────────────────────────────────────────
 
-console.print(Rule("[bold]Exercise 3 — Predictability: Skill vs No Skill[/bold]"))
+console.print(Rule("[bold]Exercise 3 — Auditability: Skill vs No Skill[/bold]"))
 console.print(f"\n[bold cyan]Goal (same every run):[/bold cyan] {GOAL}\n")
+console.print("[dim]Watch whether search_knowledge_base (the policy check) runs every time.[/dim]\n")
 console.print(Rule("[yellow]Without skill — raw agent[/yellow]"))
 
 raw_runs = []
@@ -129,10 +133,12 @@ console.print(Panel(
     f"[bold]{'✓ yes' if raw_hits_policy else '✗ no — skipped on some runs'}[/bold]\n"
     f"With skill    — policy check ran every time? "
     f"[bold]{'✓ yes' if skill_hits_policy else '✗ no'}[/bold]\n\n"
-    "A skill does not just add steps — it guarantees them.\n"
-    "The raw agent may skip the policy check depending on how it interprets the question.\n"
-    "The skill makes it impossible to skip.\n\n"
-    "That is what makes it safe to run in production — you know exactly what ran.\n\n"
+    "Without a skill the agent has freedom — freedom means no guarantees.\n"
+    "With a skill the policy check is step 4 — it cannot be skipped.\n\n"
+    "This is the production argument for skills:\n"
+    "  Not just consistency — auditability.\n"
+    "  Can you prove to your compliance team that policy was checked\n"
+    "  on every single vendor report? With a skill — yes.\n\n"
     "→ Exercise 4 shows how the orchestration layer picks the right skill automatically.",
     title="[bold]What you saw[/bold]",
     border_style="cyan"
