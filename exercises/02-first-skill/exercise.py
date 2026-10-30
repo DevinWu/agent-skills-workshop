@@ -43,8 +43,10 @@ def run_agent(system_prompt: str, goal: str, label: str):
     """Returns (answer, tool_calls_log)."""
     messages = [{"role": "user", "content": goal}]
     tool_calls_log = []
+    turn = 0
 
     while True:
+        turn += 1
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=1024,
@@ -52,6 +54,7 @@ def run_agent(system_prompt: str, goal: str, label: str):
             tools=ALL_TOOLS,
             messages=messages,
         )
+        console.print(f"  [dim]── Turn {turn} — stop_reason = {response.stop_reason!r} ──[/dim]")
 
         if response.stop_reason == "tool_use":
             tool_results = []
@@ -62,7 +65,7 @@ def run_agent(system_prompt: str, goal: str, label: str):
                     hint = inp.get("sql", inp.get("query", str(inp)))[:60]
                     entry = f"{block.name}({hint!r})"
                     tool_calls_log.append(entry)
-                    console.print(f"  [{label}] → [cyan]{block.name}[/cyan]")
+                    console.print(f"    [{label}] → [cyan]{block.name}[/cyan]")
                     result = run_tool(block.name, block.input)
                     tool_results.append({
                         "type": "tool_result",

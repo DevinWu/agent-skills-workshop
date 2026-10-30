@@ -34,8 +34,11 @@ Answer questions using the tools available. Be concise."""
 
 def run_agent(question: str) -> str:
     messages = [{"role": "user", "content": question}]
+    turn = 0
 
     while True:
+        turn += 1
+        console.print(f"  [dim]── Turn {turn} ──[/dim]")
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=1024,
@@ -50,7 +53,7 @@ def run_agent(question: str) -> str:
             tool_results = []
             for block in response.content:
                 if block.type == "tool_use":
-                    console.print(f"    → [cyan]{block.name}[/cyan]")
+                    console.print(f"    → [cyan]{block.name}[/cyan]  [dim](tool call inside Turn {turn})[/dim]")
                     result = run_tool(block.name, block.input)
                     tool_results.append({
                         "type": "tool_result",
@@ -61,7 +64,7 @@ def run_agent(question: str) -> str:
             messages.append({"role": "user", "content": tool_results})
 
         elif response.stop_reason == "end_turn":
-            console.print(f"  [dim]→ done[/dim]")
+            console.print(f"  [dim]→ done (Turn {turn})[/dim]")
             for block in response.content:
                 if hasattr(block, "text"):
                     return block.text.strip()
@@ -74,10 +77,12 @@ console.print(Rule("[bold]Exercise 1 — Refresher: The Agent Loop[/bold]"))
 console.print("[dim]Same loop as Session 1. Tools + stop_reason. Let's move fast.[/dim]\n")
 
 questions = [
-    # Needs two tool calls — first checks overdue invoices, then looks up vendor policy
+    # Case 1 — both tools independent: Claude requests both in one go, 2 turns total
     "List all overdue invoices and tell me what our late payment policy says about them.",
-    # TODO: uncomment the line below and run again — what tool does the agent call?
-    # "What is our policy for high-risk vendors?",
+
+    # Case 2 — chained: find the overdue invoice first, then look up that vendor's policy risk
+    # Claude must see the invoice result before it knows which vendor policy to search for
+    "Find the largest overdue invoice, then tell me what our policy says about that vendor's risk level.",
 ]
 
 for q in questions:
@@ -87,9 +92,11 @@ for q in questions:
     console.print()
 
 console.print(Panel(
-    "stop_reason = 'tool_use'  → LLM wants to call a tool\n"
-    "stop_reason = 'end_turn'  → LLM is done, return the answer\n\n"
-    "This loop is the foundation everything else builds on.\n\n"
+    "Case 1 — independent tools:  Claude requests both in Turn 1, 2 turns total\n"
+    "Case 2 — chained tools:      Claude needs the first result before asking the next\n"
+    "                             Each dependent query = a new turn\n\n"
+    "The number of turns depends on whether Claude can plan all tool calls upfront\n"
+    "or needs to see intermediate results first.\n\n"
     "✏️  Try it: uncomment the second question above and run again.\n"
     "    Which tool does it call this time — query_database or search_knowledge_base?",
     title="[bold]Key reminder[/bold]",
