@@ -20,7 +20,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.rule import Rule
 
-load_dotenv()
+load_dotenv(override=True)
 
 import anthropic
 from pipeline.tools import run_tool, ALL_TOOLS
@@ -90,6 +90,14 @@ def route(goal: str, index: str) -> tuple[str, str]:
 
 # ── Skill executor ────────────────────────────────────────────────────────
 
+def _final_text(response) -> str:
+    """Join every text block. stop_details is populated only when stop_reason == 'refusal'."""
+    if response.stop_reason == "refusal" and response.stop_details:
+        return f"[refused: {response.stop_details.category}]"
+    text = "".join(b.text for b in response.content if b.type == "text").strip()
+    return text or f"[no text — stop_reason={response.stop_reason!r}]"
+
+
 def execute_skill(skill_body: str, goal: str, skill_name: str) -> str:
     messages = [{"role": "user", "content": goal}]
     while True:
@@ -114,10 +122,14 @@ def execute_skill(skill_body: str, goal: str, skill_name: str) -> str:
             messages.append({"role": "assistant", "content": response.content})
             messages.append({"role": "user", "content": tool_results})
         elif response.stop_reason == "end_turn":
-            for block in response.content:
-                if hasattr(block, "text"):
-                    return block.text.strip()
-            return ""
+            return _final_text(response)
+
+        else:
+            # max_tokens / stop_sequence / pause_turn / refusal.
+            # Must return here: nothing was appended to messages, so looping
+            # would resend the identical request forever.
+            console.print(f"  [dim][{skill_name}][/dim] [yellow]→ unexpected stop_reason {response.stop_reason!r}[/yellow]")
+            return _final_text(response)
 
 
 # ── Boot ──────────────────────────────────────────────────────────────────

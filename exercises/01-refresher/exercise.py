@@ -20,16 +20,25 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.rule import Rule
 
-load_dotenv()
+load_dotenv(override=True)
 
 import anthropic
 from pipeline.tools import run_tool, ALL_TOOLS
 
 console = Console()
-client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+api_key = os.getenv("ANTHROPIC_API_KEY")
+client = anthropic.Anthropic(api_key=api_key)
 
 SYSTEM_PROMPT = """You are a procurement analyst assistant.
 Answer questions using the tools available. Be concise."""
+
+
+def _final_text(response) -> str:
+    """Join every text block. stop_details is populated only when stop_reason == 'refusal'."""
+    if response.stop_reason == "refusal" and response.stop_details:
+        return f"[refused: {response.stop_details.category}]"
+    text = "".join(b.text for b in response.content if b.type == "text").strip()
+    return text or f"[no text — stop_reason={response.stop_reason!r}]"
 
 
 def run_agent(question: str) -> str:
@@ -65,10 +74,14 @@ def run_agent(question: str) -> str:
 
         elif response.stop_reason == "end_turn":
             console.print(f"  [dim]→ done (Turn {turn})[/dim]")
-            for block in response.content:
-                if hasattr(block, "text"):
-                    return block.text.strip()
-            return ""
+            return _final_text(response)
+
+        else:
+            # max_tokens / stop_sequence / pause_turn / refusal.
+            # Must return here: nothing was appended to messages, so looping
+            # would resend the identical request forever.
+            console.print(f"  [yellow]→ unexpected stop_reason {response.stop_reason!r}[/yellow]")
+            return _final_text(response)
 
 
 # ── Run ───────────────────────────────────────────────────────────────────

@@ -28,7 +28,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.rule import Rule
 
-load_dotenv()
+load_dotenv(override=True)
 
 import anthropic
 from pipeline.tools import run_tool, ALL_TOOLS
@@ -37,6 +37,14 @@ console = Console()
 client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 GOAL = "Check the health of our vendor Eastern Parts Corp."
+
+
+def _final_text(response) -> str:
+    """Join every text block. stop_details is populated only when stop_reason == 'refusal'."""
+    if response.stop_reason == "refusal" and response.stop_details:
+        return f"[refused: {response.stop_details.category}]"
+    text = "".join(b.text for b in response.content if b.type == "text").strip()
+    return text or f"[no text — stop_reason={response.stop_reason!r}]"
 
 
 def run_agent(system_prompt: str, goal: str, label: str):
@@ -76,10 +84,14 @@ def run_agent(system_prompt: str, goal: str, label: str):
             messages.append({"role": "user", "content": tool_results})
 
         elif response.stop_reason == "end_turn":
-            for block in response.content:
-                if hasattr(block, "text"):
-                    return block.text.strip(), tool_calls_log
-            return "", tool_calls_log
+            return _final_text(response), tool_calls_log
+
+        else:
+            # max_tokens / stop_sequence / pause_turn / refusal.
+            # Must return here: nothing was appended to messages, so looping
+            # would resend the identical request forever.
+            console.print(f"    [{label}] [yellow]→ unexpected stop_reason {response.stop_reason!r}[/yellow]")
+            return _final_text(response), tool_calls_log
 
 
 # ── Part A: No skill — agent decides ─────────────────────────────────────
