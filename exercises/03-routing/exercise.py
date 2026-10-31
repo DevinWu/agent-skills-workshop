@@ -24,7 +24,7 @@ from rich.panel import Panel
 from rich.rule import Rule
 from rich.table import Table
 
-load_dotenv()
+load_dotenv(override=True)
 
 import anthropic
 from pipeline.tools import run_tool, ALL_TOOLS
@@ -44,6 +44,14 @@ Use the tools available to answer the user's request."""
 _skill_path = os.path.join(os.path.dirname(__file__), "../../skills/vendor-health/SKILL.md")
 _skill_content = open(_skill_path).read()
 SKILL_PROMPT = re.sub(r"^---\n.*?\n---\n?", "", _skill_content, flags=re.DOTALL).strip()
+
+
+def _final_text(response) -> str:
+    """Join every text block. stop_details is populated only when stop_reason == 'refusal'."""
+    if response.stop_reason == "refusal" and response.stop_details:
+        return f"[refused: {response.stop_details.category}]"
+    text = "".join(b.text for b in response.content if b.type == "text").strip()
+    return text or f"[no text — stop_reason={response.stop_reason!r}]"
 
 
 def run_agent(system_prompt: str, label: str, goal: str) -> tuple[list[str], str]:
@@ -76,10 +84,14 @@ def run_agent(system_prompt: str, label: str, goal: str) -> tuple[list[str], str
             messages.append({"role": "assistant", "content": response.content})
             messages.append({"role": "user", "content": tool_results})
         elif response.stop_reason == "end_turn":
-            for block in response.content:
-                if hasattr(block, "text"):
-                    return tools_called, block.text.strip()
-            return tools_called, ""
+            return tools_called, _final_text(response)
+
+        else:
+            # max_tokens / stop_sequence / pause_turn / refusal.
+            # Must return here: nothing was appended to messages, so looping
+            # would resend the identical request forever.
+            console.print(f"  [{label}] [yellow]→ unexpected stop_reason {response.stop_reason!r}[/yellow]")
+            return tools_called, _final_text(response)
 
 
 console.print(Rule("[bold]Exercise 3 — When is a Skill Overkill?[/bold]"))

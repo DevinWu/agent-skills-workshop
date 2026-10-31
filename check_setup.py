@@ -13,6 +13,7 @@ print("  Agent Skills Workshop — Setup Check")
 print("=" * console_width)
 
 errors = []
+warnings = []
 
 # Python version
 if sys.version_info < (3, 10):
@@ -21,21 +22,42 @@ else:
     print(f"✓ Python {sys.version_info.major}.{sys.version_info.minor}")
 
 # Packages
+missing = []
 for pkg in ["anthropic", "dotenv", "rich"]:
     try:
-        __import__(pkg if pkg != "dotenv" else "dotenv")
+        __import__(pkg)
         print(f"✓ {pkg}")
     except ImportError:
+        missing.append(pkg)
         errors.append(f"Missing package: {pkg} — run: pip install -r requirements.txt")
 
-# API key
-from dotenv import load_dotenv
-load_dotenv()
+# API key — verified against the API, not just checked for presence.
+# override=True so .env wins over a stale ANTHROPIC_API_KEY exported by your shell.
+if "dotenv" not in missing:
+    from dotenv import load_dotenv
+    load_dotenv(override=True)
 api_key = os.getenv("ANTHROPIC_API_KEY")
+
 if not api_key or api_key == "your-api-key-here":
     errors.append("ANTHROPIC_API_KEY not set — copy .env.example to .env and add your key")
+elif "anthropic" in missing:
+    print(f"⚠ ANTHROPIC_API_KEY set ({api_key[:8]}...) — not verified, anthropic is missing")
 else:
-    print(f"✓ ANTHROPIC_API_KEY set ({api_key[:8]}...)")
+    import anthropic
+    try:
+        anthropic.Anthropic(api_key=api_key, max_retries=1).models.list(limit=1)
+        print(f"✓ ANTHROPIC_API_KEY valid ({api_key[:8]}...)")
+    except anthropic.AuthenticationError:
+        errors.append(
+            f"ANTHROPIC_API_KEY rejected ({api_key[:8]}...) — the key is invalid or revoked. "
+            "Get a fresh one at https://console.anthropic.com/settings/keys"
+        )
+    except anthropic.PermissionDeniedError:
+        errors.append(f"ANTHROPIC_API_KEY ({api_key[:8]}...) lacks permission for this workspace")
+    except anthropic.APIConnectionError:
+        warnings.append("Could not reach the API to verify the key — check your network")
+    except anthropic.APIStatusError as e:
+        warnings.append(f"Could not verify the key — API returned {e.status_code}")
 
 # Database
 db_path = os.path.join(os.path.dirname(__file__), "data/erp.db")
@@ -55,6 +77,9 @@ skill_count = sum(
 print(f"✓ {skill_count} skills found")
 
 print("=" * console_width)
+if warnings:
+    for w in warnings:
+        print(f"  ⚠ {w}")
 if errors:
     print("ERRORS:")
     for e in errors:
