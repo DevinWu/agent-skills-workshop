@@ -1,18 +1,14 @@
 """
-Exercise 3 — Auditability: Skill vs No Skill
-==============================================
-A skill does not just add steps — it makes them guaranteed and auditable.
+Exercise 3 — When is a Skill Overkill?
+========================================
+A skill forces fixed steps — great when you need all of them.
+But what if the question only needs one tool call?
 
-Without a skill, the agent has freedom.
-Freedom means it may or may not check policy — you cannot prove it did.
+This exercise runs the SAME simple question two ways:
+  - With the vendor-health skill  → forces 4 steps every time
+  - Without a skill (direct)      → one tool call, direct answer
 
-With a skill, the policy check is step 4.
-It cannot be skipped. You can prove it ran. Every single time.
-
-That is the production argument for skills: not just consistency, but auditability.
-Can you tell your compliance team exactly what ran on every vendor report? With a skill — yes.
-
-This exercise runs the SAME goal 3 times each way so you can see it yourself.
+Watch the tool calls. Then ask: was the skill worth it here?
 
 Run:  python exercises/03-routing/exercise.py
 """
@@ -36,7 +32,11 @@ from pipeline.tools import run_tool, ALL_TOOLS
 console = Console()
 client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
-GOAL = "Check the health of our vendor Eastern Parts Corp."
+# A simple question — one tool call is all it needs
+SIMPLE_QUESTION = "What is the risk rating of Eastern Parts Corp?"
+
+# The skill is designed for a full health check — it will force 4 steps
+SKILL_GOAL = "Check the health of Eastern Parts Corp"
 
 RAW_PROMPT = """You are a procurement analyst assistant.
 Use the tools available to answer the user's request."""
@@ -46,9 +46,9 @@ _skill_content = open(_skill_path).read()
 SKILL_PROMPT = re.sub(r"^---\n.*?\n---\n?", "", _skill_content, flags=re.DOTALL).strip()
 
 
-def run_agent(system_prompt: str, label: str) -> list[str]:
-    """Run the agent, return the list of tool names called."""
-    messages = [{"role": "user", "content": GOAL}]
+def run_agent(system_prompt: str, label: str, goal: str) -> tuple[list[str], str]:
+    """Run the agent, return (tool names called, final answer)."""
+    messages = [{"role": "user", "content": goal}]
     tools_called = []
 
     while True:
@@ -76,72 +76,80 @@ def run_agent(system_prompt: str, label: str) -> list[str]:
             messages.append({"role": "assistant", "content": response.content})
             messages.append({"role": "user", "content": tool_results})
         elif response.stop_reason == "end_turn":
-            return tools_called
+            for block in response.content:
+                if hasattr(block, "text"):
+                    return tools_called, block.text.strip()
+            return tools_called, ""
 
 
-RUNS = 3
+console.print(Rule("[bold]Exercise 3 — When is a Skill Overkill?[/bold]"))
+console.print(f"\n[bold cyan]Question:[/bold cyan] {SIMPLE_QUESTION}\n")
+console.print("[dim]This only needs one tool call. Watch what happens when we force a skill.[/dim]\n")
 
-# ── Without skill — run 3 times ───────────────────────────────────────────
+# ── With skill ────────────────────────────────────────────────────────────
 
-console.print(Rule("[bold]Exercise 3 — Auditability: Skill vs No Skill[/bold]"))
-console.print(f"\n[bold cyan]Goal (same every run):[/bold cyan] {GOAL}\n")
-console.print("[dim]Watch whether search_knowledge_base (the policy check) runs every time.[/dim]\n")
-console.print(Rule("[yellow]Without skill — raw agent[/yellow]"))
+console.print(Rule("[green]With skill — vendor-health (4 fixed steps)[/green]"))
+skill_tools, skill_answer = run_agent(SKILL_PROMPT, "skill", SKILL_GOAL)
 
-raw_runs = []
-for i in range(1, RUNS + 1):
-    console.print(f"\n[dim]Run {i}:[/dim]")
-    tools = run_agent(RAW_PROMPT, f"run-{i}")
-    raw_runs.append(tools)
-
-# ── With skill — run 3 times ──────────────────────────────────────────────
-
+console.print(Panel(skill_answer, title="[bold]Answer (with skill)[/bold]", border_style="green"))
 console.print()
-console.print(Rule("[green]With skill — fixed steps[/green]"))
 
-skill_runs = []
-for i in range(1, RUNS + 1):
-    console.print(f"\n[dim]Run {i}:[/dim]")
-    tools = run_agent(SKILL_PROMPT, f"skill-{i}")
-    skill_runs.append(tools)
+# ── Direct — no skill ─────────────────────────────────────────────────────
 
-# ── Comparison table ──────────────────────────────────────────────────────
+console.print(Rule("[yellow]Direct — no skill (agent decides)[/yellow]"))
+raw_tools, raw_answer = run_agent(RAW_PROMPT, "direct", SIMPLE_QUESTION)
 
+console.print(Panel(raw_answer, title="[bold]Answer (direct)[/bold]", border_style="yellow"))
 console.print()
-console.print(Rule("[bold]Same goal — what actually ran[/bold]"))
+
+# ── Comparison ────────────────────────────────────────────────────────────
+
+console.print(Rule("[bold]Comparison[/bold]"))
 
 TOOL_SHORT = {"query_database": "query_db", "search_knowledge_base": "search_kb"}
 
 table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
-table.add_column("Run", width=6)
-table.add_column("Without skill", style="yellow", width=40)
-table.add_column("With skill", style="green", width=40)
+table.add_column("", width=16)
+table.add_column("With skill", style="green", width=36)
+table.add_column("Direct", style="yellow", width=36)
 
-for i in range(RUNS):
-    raw  = " → ".join(TOOL_SHORT.get(t, t) for t in raw_runs[i])
-    skill = " → ".join(TOOL_SHORT.get(t, t) for t in skill_runs[i])
-    table.add_row(f"#{i+1}", raw, skill)
+table.add_row(
+    "Tool calls",
+    " → ".join(TOOL_SHORT.get(t, t) for t in skill_tools),
+    " → ".join(TOOL_SHORT.get(t, t) for t in raw_tools),
+)
+table.add_row("Count", str(len(skill_tools)), str(len(raw_tools)))
 
 console.print(table)
 console.print()
 
-# ── Check if raw runs were consistent ────────────────────────────────────
-
-raw_hits_policy   = all("search_knowledge_base" in r for r in raw_runs)
-skill_hits_policy = all("search_knowledge_base" in r for r in skill_runs)
-
 console.print(Panel(
-    f"Without skill — policy check (search_knowledge_base) ran every time? "
-    f"[bold]{'✓ yes' if raw_hits_policy else '✗ no — skipped on some runs'}[/bold]\n"
-    f"With skill    — policy check ran every time? "
-    f"[bold]{'✓ yes' if skill_hits_policy else '✗ no'}[/bold]\n\n"
-    "Without a skill the agent has freedom — freedom means no guarantees.\n"
-    "With a skill the policy check is step 4 — it cannot be skipped.\n\n"
-    "This is the production argument for skills:\n"
-    "  Not just consistency — auditability.\n"
-    "  Can you prove to your compliance team that policy was checked\n"
-    "  on every single vendor report? With a skill — yes.\n\n"
-    "→ Exercise 4 shows how the orchestration layer picks the right skill automatically.",
+    f"The question was: \"{SIMPLE_QUESTION}\"\n\n"
+    f"Direct: {len(raw_tools)} tool call — clean, precise answer.\n"
+    f"Skill:  {len(skill_tools)} tool calls — full health report nobody asked for.\n\n"
+    "The skill is not wrong — it ran the right steps for a full health check.\n"
+    "But the question only needed one thing: the risk rating.\n\n"
+    "Rule of thumb:\n"
+    "  ✓ Use a skill  — multiple steps must always happen, output must be consistent\n"
+    "  ✗ Skip a skill — one tool call answers it, no audit requirement\n\n"
+    "→ Part 3 covers when to use which.",
     title="[bold]What you saw[/bold]",
     border_style="cyan"
 ))
+
+# ── Verify it yourself — the answer is just a column ─────────────────────
+
+console.print()
+console.print(Rule("[dim]Why only 1 call was needed[/dim]"))
+console.print(
+    "[dim]risk_rating is just a column in the vendors table.\n"
+    "Run this and look at the vendors table — the answer is right there:\n\n"
+    "  python3 -c \"\n"
+    "  import sqlite3\n"
+    "  conn = sqlite3.connect('data/erp.db')\n"
+    "  rows = conn.execute('SELECT * FROM vendors LIMIT 5').fetchall()\n"
+    "  cols = [d[0] for d in conn.execute('SELECT * FROM vendors LIMIT 0').description]\n"
+    "  print(' | '.join(cols))\n"
+    "  for r in rows: print(' | '.join(str(v) for v in r))\n"
+    "  \"[/dim]"
+)

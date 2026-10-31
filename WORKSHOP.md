@@ -271,22 +271,6 @@ Great for one-off questions  Right for repeated, production workflows
 
 **Skills do not replace tool chaining. They control it.**
 
-### The problem with a raw agent
-
-A raw agent is powerful but unpredictable:
-
-```
-Goal: "Check the health of vendor Eastern Parts Corp"
-
-Run 1:  query risk rating → check invoices → answer
-Run 2:  check POs → query risk → look up policy → answer  (different order)
-Run 3:  query risk rating → answer  (skipped steps)
-```
-
-Three runs, three different behaviours. No guarantee of consistency.
-
-If this is a report that goes to your CFO every Monday — you need the same sections every time.
-
 ### What a skill looks like
 
 A skill is a markdown file — `SKILL.md` — with two parts:
@@ -389,9 +373,11 @@ The skill body is just a string. When Claude reads it as the system prompt, it f
 
 ### Why Part A misses the policy check
 
-Part A's system prompt says "use tools to answer." Claude decides what's relevant. For a vendor health question, it queries the database — but it may not think to search policy documents unless explicitly told.
+Part A's answer looks good — it found the overdue invoice, listed the POs, flagged the high-risk rating. Claude is not dumb. It wrote smart SQL and got real data.
 
-Part B's system prompt says "follow these 4 steps EXACTLY" — step 4 is the policy search. Claude has no choice. The policy check happens every single time.
+But it never called `search_knowledge_base`. So it never read `data/policies/high-risk-vendor-policy.txt`, which contains: *"Payment terms cannot exceed 30 days for High-risk vendors."* The database only stores the 45-day terms — it has no rule that says that's a violation. That rule lives in the policy file. Without step 4, Claude never sees it, never makes the comparison, never flags the issue.
+
+The skill is not about making Claude smarter. It is about making step 4 non-negotiable.
 
 ```
 Part A — 2 tool calls (missed policy):        Part B — 4 tool calls (skill):
@@ -470,28 +456,43 @@ A skill is overkill when:
 
 ---
 
-## 1:45 — Exercise 3: Skill vs No Skill
+## 1:45 — Exercise 3: When is a Skill Overkill?
 
 > **Key points to land:**
-> - Same goal, 3 runs without skill, 3 runs with skill
-> - Without skill: the policy check gets skipped — not every time, but sometimes
-> - With skill: the policy check is guaranteed — impossible to skip
-> - The lesson: a skill doesn't just add steps, it guarantees them
+> - A skill forces ALL its steps — even when the question doesn't need them
+> - Simple question + skill = wasted tool calls, no extra value
+> - The direct approach wins for simple questions — one call, same answer
+> - A skill is only worth it when ALL the steps are needed every time
 
 ```bash
 python3 exercises/03-routing/exercise.py
 ```
 
-One question: **"What is the risk rating of Eastern Parts Corp?"**
+One simple question: **"What is the risk rating of Eastern Parts Corp?"**
 
-- **With skill** — runs the full 4-step vendor-health workflow
-- **Without skill** — one direct tool call, direct answer
+- **With skill** — forces all 4 vendor-health steps every time
+- **Direct** — one `query_database` call, done
 
-Compare the number of tool calls and the time. The direct approach wins here.
+Watch the tool call count. The direct approach gets the same answer in one call. The skill ran 3 extra steps that added nothing for this question.
 
-After running, ask: for which question WOULD you use the vendor-health skill? → "Give me a full health check on Eastern Parts Corp" — that warrants all 4 steps.
+**Verify it yourself** — the answer was always just a column in the database:
 
-> **Presenter note:** 25 minutes. After running, discuss: what's the right heuristic for when to package something as a skill? Build this list with the room.
+```bash
+python3 -c "
+import sqlite3
+conn = sqlite3.connect('data/erp.db')
+rows = conn.execute('SELECT * FROM vendors LIMIT 5').fetchall()
+cols = [d[0] for d in conn.execute('SELECT * FROM vendors LIMIT 0').description]
+print(' | '.join(cols))
+for r in rows: print(' | '.join(str(v) for v in r))
+"
+```
+
+Look at the `risk_rating` column — it's right there. No policy lookup needed. No invoice check. One `SELECT` was always enough.
+
+After running, ask the room: "So when WOULD you use the skill?" → When you need all 4 steps — the full health check with policy compliance. Not for a simple lookup.
+
+> **Presenter note:** 25 minutes. After running, discuss: what's the right heuristic? Build the rule with the room — multiple steps that must always happen = skill. One tool call, no audit = direct.
 
 ---
 
@@ -543,15 +544,16 @@ Structured report returned
 
 ### invoke_skill — a synthetic tool
 
-`invoke_skill` is not a real tool. It never leaves the orchestration layer. When the orchestrator calls it, the layer intercepts, loads the skill body, and starts the worker. The orchestrator never knows the worker's internals.
+`invoke_skill` is not a real tool — it never goes to a database or an API. It is just a signal to `orchestrator.py`. When the orchestrator LLM calls it, the code catches it, looks up the matching skill, loads its body, and runs `execute_skill()`. That's the entire mechanism:
 
+```python
+# orchestrator.py — what actually happens when invoke_skill is called
+skill_name, reason = route(goal, skills)          # LLM picks the skill
+skill = next(s for s in skills if s["name"] == skill_name)
+answer = execute_skill(skill["body"], goal)        # worker runs with real tools
 ```
-Orchestrator calls: invoke_skill("procurement-audit")
-                     ↓
-Layer intercepts — loads skills/procurement-audit/SKILL.md
-Sets body as worker's system prompt
-Worker runs the agent loop with real tools
-```
+
+The orchestrator LLM never sees the skill body. It only sees names and descriptions.
 
 ### The description IS the routing signal
 
@@ -644,39 +646,32 @@ GOAL ARRIVES  (client.py sends — Terminal 2)
               answer sent back to client (Terminal 2)
 ```
 
-### What is actually happening — two Claude calls per goal
+### What is actually happening — multiple Claude calls per goal
 
-For each goal the exercise makes **two separate API calls**:
+For each goal the exercise makes at least **two API calls** — one to route, then one or more to execute:
 
-**Call 1 — the router**
+**Call 1 — the router (always exactly one call)**
 
-The code scans `skills/*/SKILL.md` and builds an index — just names and descriptions, no bodies:
+The orchestrator passes the prebuilt index to Claude as the system prompt, along with `invoke_skill`. Claude reads the goal, matches it to the best description, and calls `invoke_skill("vendor-health")`. One call, no loop.
 
-```
-- vendor-health:      Check the health of a specific vendor...
-- overdue-report:     Generate a report of all overdue invoices...
-- procurement-audit:  Run a full procurement health audit...
-- my-first-skill:     ???
-```
+**Call 2+ — the skill executor (one call per turn in the agent loop)**
 
-It gives this index to Claude as the system prompt, along with a synthetic tool called `invoke_skill`. Claude reads the goal, matches it to the best description, and calls `invoke_skill("vendor-health")`. That's it — one tool call, no loop needed.
-
-**Call 2 — the skill executor**
-
-The code loads `skills/vendor-health/SKILL.md`, strips the frontmatter, and uses the body as the system prompt for a full agent loop with real tools. Claude now follows the skill's fixed steps exactly as in Exercise 2.
+The code loads `skills/vendor-health/SKILL.md`, strips the frontmatter, and uses the body as the system prompt for a full agent loop with real tools. Each tool_use turn is a separate API call — vendor-health needs 4 tool calls across multiple turns.
 
 ```
 Goal: "Check the health of vendor Eastern Parts Corp"
        ↓
-Router call:
+Router call (1 API call):
   system = skill index (names + descriptions only)
   tool   = invoke_skill
   Claude calls invoke_skill("vendor-health")
        ↓
-Executor call:
+Executor loop (multiple API calls):
   system = vendor-health skill body
   tools  = query_database, search_knowledge_base
-  Claude follows 4 fixed steps → full report
+  Turn 1: tool_use → query_database × 3
+  Turn 2: tool_use → search_knowledge_base
+  Turn 3: end_turn → full report
 ```
 
 ### Why the body is never shown to the router

@@ -74,12 +74,11 @@ INVOKE_SKILL_SCHEMA = {
 }
 
 
-def route(goal: str, skills: list[dict]) -> tuple[str, str]:
-    index = "\n".join(f"- {s['name']}: {s['description']}" for s in skills)
+def route(goal: str, index: str) -> tuple[str, str]:
     response = client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=256,
-        system=f"You are a skill router.\n\nAvailable skills:\n{index}\n\nCall invoke_skill immediately.",
+        system=f"You are a skill router.\n\nAvailable skills:\n{index}\n\n.",
         tools=[INVOKE_SKILL_SCHEMA],
         messages=[{"role": "user", "content": goal}],
     )
@@ -127,6 +126,7 @@ console.print(Rule("[bold]Orchestrator — booting up[/bold]"))
 console.print("[dim]Scanning skills/ directory...[/dim]")
 
 skills = load_skills()
+skill_index = "\n".join(f"- {s['name']}: {s['description']}" for s in skills)
 
 console.print()
 for s in skills:
@@ -135,7 +135,7 @@ for s in skills:
 
 console.print()
 console.print(Panel(
-    "\n".join(f"  {s['name']}: {s['description']}" for s in skills),
+    skill_index,
     title=f"[bold]Skill Index — {len(skills)} workers in memory[/bold]",
     border_style="green"
 ))
@@ -164,7 +164,7 @@ while True:
         console.print(Rule(f"[cyan]{goal}[/cyan]"))
         console.print("[dim]Routing...[/dim]")
 
-        skill_name, reason = route(goal, skills)
+        skill_name, reason = route(goal, skill_index)
         console.print(f"  [dim]invoke_skill([/dim][bold green]\"{skill_name}\"[/bold green][dim])[/dim]  — {reason}")
 
         skill = next((s for s in skills if s["name"] == skill_name), None)
